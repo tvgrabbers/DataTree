@@ -7,7 +7,7 @@ pages.
 It reads the page into a Node based tree, from which you, on the bases of a json
 data-file, can extract your data into a list of items. It can first extract a
 list of keyNodes and extract for each of them the same data-list. During the
-extraction severaldata manipulation functions are available.
+extraction several data manipulation functions are available.
 For the newest version and documentation see:
 
     https://github.com/tvgrabbers/datatreegrab/
