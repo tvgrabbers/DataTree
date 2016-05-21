@@ -5,7 +5,7 @@ Initially named just DataTree, but as this name is already taken in the Python l
 It reads the page into a Node based tree, from which you, on the bases of a json  
 data-file, can extract your data into a list of items. It can first extract a  
 list of keyNodes and extract for each of them the same data-list. During the  
-extraction severaldata manipulation functions are available.  
+extraction several data manipulation functions are available.  
 
 The current install will only install under Python 2. It probably will run under  
 Pyton 3 but is not jet tested. It is still considered beta  
