@@ -8,7 +8,7 @@ list of keyNodes and extract for each of them the same data-list. During the
 extraction several data manipulation functions are available.  
 
 The current install will only install under Python 2. It probably will run under  
-Pyton 3 but is not jet tested. It is still considered beta  
+Python 3 but is not jet tested. It is still considered beta  
 It will need the pytz package: https://pypi.python.org/pypi/pytz/ 
 
 Run: `sudo ./setup.py install` to install it into your Python2 module tree
