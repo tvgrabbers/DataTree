@@ -51,6 +51,7 @@ Check the secundary "data" items:
  * "multiplier", "divider":1000	(for timestamp)
  * "replace":{"tv":2, "radio":12}
  * "default":
- * "type":"datetimestring","timestamp","time","timedelta","date","datestamp", "relative-weekday","string", "lower-ascii","int", "float","boolean","list",
+ * "type":
+   * "datetimestring","timestamp","time","timedelta","date","datestamp", "relative-weekday","string", "lower-ascii","int", "float","boolean","list",
  * "member-off"
 
