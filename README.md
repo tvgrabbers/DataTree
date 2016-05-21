@@ -7,8 +7,14 @@ data-file, can extract your data into a list of items. It can first extract a
 list of keyNodes and extract for each of them the same data-list. During the  
 extraction severaldata manipulation functions are available.  
 
+The current install will only install under Python 2. It probably will run under  
+Pyton 3 but is not jet tested.  
+It will need the pytz package: https://pypi.python.org/pypi/pytz/ 
+
+Run: `sudo ./setup.py install` to install it into your Python2 module tree
+
 Further documentation will follow, but to give an indication, a short list of keywords:  
-path-dict keywords:
+###path-dict keywords:
  * "path": "all", "root", "parent"
  * "key":<name>
  * "keys":{"<name>":{"link":1},"<name>":""} (selection on child presence)
@@ -16,13 +22,13 @@ path-dict keywords:
  * "attrs":{"<name>":{"link":1},"<name>":{"not":[]},"<name>":"","<name>":null}
  * "index":{"link":1}
 
-selection-keywords:
+###selection-keywords:
  * "select": "key", "text", "tag", "index", "value"
  * "attr":"<name>"
  * "link":1		(create a link)
  * "link-index":1		(create a link)
 
-link examples
+###link examples
 ```
 [{"key":"abstract_key", "link":1},
         "root",{"key":"library"},"all",{"key":"abstracts"},
@@ -33,7 +39,7 @@ link examples
 
         [...,{"tag":"img", "attrs":{"class": {"link":1}},"attr":"src"}],
 ```
-selection-format keywords:
+###selection-format keywords:
  * "default":
  * "type":"datetimestring","timestamp","time","date","string","int","boolean","list",
  * "divider":1000	(for timestamp)
