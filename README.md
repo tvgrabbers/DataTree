@@ -3,7 +3,7 @@
 [Go to tvgrabnlpy](https://github.com/tvgrabbers/tvgrabnlpy)  
 
 Spin-off python module for extracting structured data from HTML and JSON pages.  
-It is at the heart of the tvgrabpyAPI and was initially named just DataTree,  
+It is at the heart of the tv_grab_py_API and was initially named just DataTree,  
 but as this name is already taken in the Python library...
 
 It reads the page into a Node based tree, from which you, on the bases of a json  
