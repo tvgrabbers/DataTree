@@ -31,5 +31,5 @@ setup(
     maintainer = 'Hika van den Hoven',
     maintainer_email = 'hikavdh at gmail dot com',
     license='GPL',
-    url='https://github.com/tvgrabbers/datatree/',
+    url='https://github.com/tvgrabbers/DataTree',
 )

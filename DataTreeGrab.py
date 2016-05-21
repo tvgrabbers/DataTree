@@ -10,7 +10,7 @@ list of keyNodes and extract for each of them the same data-list. During the
 extraction several data manipulation functions are available.
 For the newest version and documentation see:
 
-    https://github.com/tvgrabbers/datatreegrab/
+    https://github.com/tvgrabbers/DataTree/
 
     LICENSE
 
@@ -1368,5 +1368,7 @@ if __name__ == '__main__':
     else:
         sys.stdout.write('%s-%s.%s.%s-p%s\n' % (version()[0],version()[1],version()[2],version()[3],version()[4]))
 
-    sys.stdout.write('This package is intended to be used as a module!\n\n')
+    sys.stdout.write('This package is intended to be used as a module!\n')
+    sys.stdout.write('Run:\n')
+    sys.stdout.write('>   sudo ./setup.py install\n\n')
     sys.stdout.write('%s\n' % __doc__)
