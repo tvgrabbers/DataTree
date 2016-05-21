@@ -43,13 +43,14 @@ Check the secundary "data" items:
         [...,{"tag":"img", "attrs":{"class": {"link":1}},"attr":"src"}],
 ```
 ###selection-format keywords:
- * "default":
- * "type":"datetimestring","timestamp","time","date","string","int","boolean","list",
- * "divider":1000	(for timestamp)
- * "replace":{"tv":2, "radio":12}
+ * "lower","upper","capitalize"
  * "ascii-replace":["ss","s", "[-!?(), ]"]
- * "lower-ascii"
- * "split":[["/",-1],["\\.",0,1]]
- * "rstrip":"')"
+ * "lstrip", "rstrip":"')"
  * "sub":["",""]
+ * "split":[["/",-1],["\\.",0,1]]
+ * "multiplier", "divider":1000	(for timestamp)
+ * "replace":{"tv":2, "radio":12}
+ * "default":
+ * "type":"datetimestring","timestamp","time","timedelta","date","datestamp", "relative-weekday","string", "lower-ascii","int", "float","boolean","list",
+ * "member-off"
 
