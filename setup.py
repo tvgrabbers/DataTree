@@ -11,14 +11,12 @@ extraction several data manipulation functions are available.'''
 from distutils.core import setup
 from DataTreeGrab import version
 
+dtv = '%s.%s.%s' % (version()[1],version()[2],version()[3])
 if version()[6]:
-    dtv = '%s.%s.%s-p%s-alfa' % (version()[1],version()[2],version()[3],version()[4])
+    dtv = '%s-alfa' % (dtv)
 
 elif version()[5]:
-    dtv = '%s.%s.%s-p%s-beta' % (version()[1],version()[2],version()[3],version()[4])
-
-else:
-    dtv = '%s.%s.%s-p%s' % (version()[1],version()[2],version()[3],version()[4])
+    dtv = '%s-beta' % (dtv)
 
 setup(
     name = version()[0],
