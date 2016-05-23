@@ -85,12 +85,12 @@ class DATAnode():
             node.child_index = len(self.children)
             self.children.append(node)
 
-    def get_children(self, data_def = None, link_values=None):
+    def get_children(self, path_def = None, link_values=None):
         childs = []
         if not isinstance(link_values, dict):
             link_values = {}
 
-        d_def = data_def if isinstance(data_def, list) else [data_def]
+        d_def = path_def if isinstance(path_def, list) else [path_def]
         if len(d_def) == 0 or d_def[0] == None:
             # It's not a child definition
             if self.dtree.show_result:
@@ -116,7 +116,7 @@ class DATAnode():
                         link_values[k] = v
 
                 self.link_value = {}
-                childs = self.get_children(data_def = d_def[1:], link_values=link_values)
+                childs = self.get_children(path_def = d_def[1:], link_values=link_values)
                 if nm == None:
                     return childs
 
@@ -134,7 +134,7 @@ class DATAnode():
                         link_values[k] = v
 
                 self.parent.link_value = {}
-                childs = self.parent.get_children(data_def = d_def[1:], link_values=link_values)
+                childs = self.parent.get_children(path_def = d_def[1:], link_values=link_values)
                 if nm == None:
                     return childs
 
@@ -150,7 +150,7 @@ class DATAnode():
                         link_values[k] = v
 
                 self.root.link_value = {}
-                childs = self.root.get_children(data_def = d_def[1:], link_values=link_values)
+                childs = self.root.get_children(path_def = d_def[1:], link_values=link_values)
                 if nm == None:
                     return childs
 
@@ -167,7 +167,7 @@ class DATAnode():
                             link_values[k] = v
 
                     item.link_value = {}
-                    jl = item.get_children(data_def = d_def[1:], link_values=link_values)
+                    jl = item.get_children(path_def = d_def[1:], link_values=link_values)
                     if isinstance(jl, list):
                         childs.extend(jl)
 
@@ -192,7 +192,7 @@ class DATAnode():
                             link_values[k] = v
 
                     item.link_value = {}
-                    jl = item.get_children(data_def = d_def[1:], link_values=link_values)
+                    jl = item.get_children(path_def = d_def[1:], link_values=link_values)
                     if isinstance(jl, list):
                         childs.extend(jl)
 
@@ -250,16 +250,17 @@ class HTMLnode(DATAnode):
         self.tail = u''
         self.attributes = {}
         DATAnode.__init__(self, dtree, parent)
-        if isinstance(data, (str, unicode)):
-            self.tag = data.lower()
+        with self.node_lock:
+            if isinstance(data, (str, unicode)):
+                self.tag = data.lower()
 
-        elif isinstance(data, list):
-            if len(data) > 0:
-                self.tag = data[0].lower()
+            elif isinstance(data, list):
+                if len(data) > 0:
+                    self.tag = data[0].lower()
 
-            if len(data) > 1 and isinstance(data[1], (list, tuple)):
-                for a in data[1]:
-                    self.attributes[a[0].lower()] = a[1]
+                if len(data) > 1 and isinstance(data[1], (list, tuple)):
+                    for a in data[1]:
+                        self.attributes[a[0].lower()] = a[1]
 
     def get_attribute(self, name):
         if name.lower() in self.attributes.keys():
@@ -483,19 +484,20 @@ class JSONnode(DATAnode):
         self.key_index = {}
         self.value = None
         DATAnode.__init__(self, dtree, parent)
-        if isinstance(data, list):
-            self.type = "list"
-            for k in range(len(data)):
-                JSONnode(self.dtree, data[k], self, k)
+        with self.node_lock:
+            if isinstance(data, list):
+                self.type = "list"
+                for k in range(len(data)):
+                    JSONnode(self.dtree, data[k], self, k)
 
-        elif isinstance(data, dict):
-            self.type = "dict"
-            for k, item in data.items():
-                JSONnode(self.dtree, item, self, k)
+            elif isinstance(data, dict):
+                self.type = "dict"
+                for k, item in data.items():
+                    JSONnode(self.dtree, item, self, k)
 
-        else:
-            self.type = "value"
-            self.value = data
+            else:
+                self.type = "value"
+                self.value = data
 
     def append_child(self, node):
         with self.node_lock:
@@ -657,7 +659,7 @@ class DATAtree():
             if self.show_result:
                 self.print_text(self.root.print_node())
 
-            sn = self.root.get_children(data_def = init_path)
+            sn = self.root.get_children(path_def = init_path)
             self.start_node = self.root if (sn == None or len(sn) == 0) else sn[0]
 
     def find_data_value(self, path_def, start_node = None, link_values = None):
@@ -668,7 +670,7 @@ class DATAtree():
             if start_node == None or not isinstance(start_node, DATAnode):
                 start_node = self.start_node
 
-            nlist = start_node.get_children(data_def = path_def, link_values = link_values)
+            nlist = start_node.get_children(path_def = path_def, link_values = link_values)
             if self.data_value('select', str, path_def[-1]) == 'presence':
                 # We return True if exactly one node is found, else False
                 return bool(isinstance(nlist, DATAnode) or (isinstance(nlist, list) and len(nlist) == 1 and  isinstance(nlist[0], DATAnode)))
@@ -740,7 +742,7 @@ class DATAtree():
                     if self.show_result:
                         self.fle.write('parsing keypath %s\n'.encode('utf-8') % (kp[0]))
 
-                    self.key_list = self.start_node.get_children(data_def = kp)
+                    self.key_list = self.start_node.get_children(path_def = kp)
                     for k in self.key_list:
                         if not isinstance(k, DATAnode):
                             continue
@@ -849,25 +851,25 @@ class DATAtree():
                         #~ traceback.print_exc()
                         pass
 
-            if self.is_data_value('multiplier', int, node_def):
-                try:
-                    value = int(value) * node_def['multiplier']
+        if self.is_data_value('multiplier', int, node_def):
+            try:
+                value = int(value) * node_def['multiplier']
 
-                except:
-                    #~ traceback.print_exc()
-                    pass
+            except:
+                #~ traceback.print_exc()
+                pass
 
-            if self.is_data_value('devider', int, node_def):
-                try:
-                    value = int(value) / node_def['devider']
+        if self.is_data_value('divider', int, node_def):
+            try:
+                value = int(value) / node_def['divider']
 
-                except:
-                    #~ traceback.print_exc()
-                    pass
+            except:
+                #~ traceback.print_exc()
+                pass
 
         # Is there a replace dict
         if self.is_data_value('replace', dict, node_def):
-            if value == None:
+            if value == None or not isinstance(value, (str, unicode)):
                 pass
 
             elif value.strip().lower() in node_def['replace'].keys():
@@ -888,11 +890,11 @@ class DATAtree():
         if self.is_data_value('type', unicode, node_def):
             try:
                 if node_def['type'] == 'timestamp':
-                    val = value
-                    if self.is_data_value('multiplier', int, node_def):
-                        val = value/node_def['multiplier']
+                    #~ val = value
+                    #~ if self.is_data_value('multiplier', int, node_def):
+                        #~ val = value/node_def['multiplier']
 
-                    value = datetime.datetime.fromtimestamp(float(val), self.utc)
+                    value = datetime.datetime.fromtimestamp(float(value), self.utc)
 
                 elif node_def['type'] == 'datetimestring':
                     dts = self.datetimestring
@@ -973,11 +975,11 @@ class DATAtree():
 
 
                 elif node_def['type'] == 'datestamp':
-                    val = value
-                    if self.is_data_value('multiplier', int, node_def):
-                        val = value/node_def['multiplier']
+                    #~ val = value
+                    #~ if self.is_data_value('multiplier', int, node_def):
+                        #~ val = value/node_def['multiplier']
 
-                    value = datetime.date.fromtimestamp(float(val))
+                    value = datetime.date.fromtimestamp(float(value))
 
                 elif node_def['type'] == 'relative-weekday':
                     if value.strip().lower() in self.relative_weekdays.keys():
@@ -1002,7 +1004,7 @@ class DATAtree():
 
                 elif node_def['type'] == 'boolean':
                     if not isinstance(value, bool):
-                        if isinstance(value, int):
+                        if isinstance(value, (int, float)):
                             value = bool(value>0)
 
                         elif isinstance(value, (str, unicode)):
@@ -1173,7 +1175,7 @@ class DATAtree():
 # end DATAtree
 
 class HTMLtree(HTMLParser, DATAtree):
-    def __init__(self, data='', autoclose_tags=[], print_tags = False, output = sys.stdout):
+    def __init__(self, data, autoclose_tags=[], print_tags = False, output = sys.stdout):
         HTMLParser.__init__(self)
         DATAtree.__init__(self, output)
         with self.tree_lock:
