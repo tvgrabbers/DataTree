@@ -45,7 +45,7 @@ dt_name = u'DataTreeGrab'
 dt_major = 1
 dt_minor = 0
 dt_patch = 0
-dt_patchdate = u'20160521'
+dt_patchdate = u'20160523'
 dt_alfa = False
 dt_beta = True
 
@@ -637,6 +637,7 @@ class DATAtree():
             self.fle = output
             self.extract_from_parent = False
             self.result = []
+            self.data_def = {}
             self.month_names = []
             self.weekdays = []
             self.relative_weekdays = {}
@@ -648,9 +649,36 @@ class DATAtree():
             self.timezone = pytz.utc
             self.value_filters = {}
 
-    def find_start_node(self, data_def=None):
+    def check_data_def(self, data_def):
         with self.tree_lock:
             self.data_def = data_def if isinstance(data_def, dict) else {}
+            self.month_names = self.data_value("month-names", list)
+            self.weekdays = self.data_value("weekdays", list)
+            self.datetimestring = self.data_value("datetimestring", str, default = u"%Y-%m-%d %H:%M:%S")
+            self.time_splitter = self.data_value("time-splitter", str, default = ':')
+            self.date_sequence = self.data_value("date-sequence", list, default = ["y","m","d"])
+            self.date_splitter = self.data_value("date-splitter", str, default = '-')
+            self.timezone = pytz.timezone(self.data_value('timezone', str, default = 'utc'))
+            self.value_filters = self.data_value("value-filters", dict)
+            self.current_date = self.timezone.normalize(datetime.datetime.now(pytz.utc).astimezone(self.timezone)).toordinal()
+            rw = self.data_value( "relative-weekdays", dict)
+            for name, index in rw.items():
+                self.relative_weekdays[name] = datetime.date.fromordinal(self.current_date + index)
+
+            current_weekday = datetime.date.fromordinal(self.current_date).weekday()
+            for index in range(len(self.weekdays)):
+                name = self.weekdays[index]
+                if index < current_weekday:
+                    self.relative_weekdays[name] = datetime.date.fromordinal(self.current_date + index + 7 - current_weekday)
+
+                else:
+                    self.relative_weekdays[name] = datetime.date.fromordinal(self.current_date + index - current_weekday)
+
+    def find_start_node(self, data_def=None):
+        with self.tree_lock:
+            if isinstance(data_def, dict):
+                self.data_def = data_def
+
             if self.print_searchtree:
                 self.print_text('The root Tree:\n')
                 self.start_node.print_tree()
@@ -716,10 +744,13 @@ class DATAtree():
 
     def extract_datalist(self, data_def=None):
         with self.tree_lock:
-            self.data_def = data_def if isinstance(data_def, dict) else {}
+            if isinstance(data_def, dict):
+                self.data_def = data_def
+
             if self.print_searchtree:
                 self.print_text('The %s Tree:\n' % self.start_node.print_node())
                 self.start_node.print_tree()
+
             self.result = []
             # Are there multiple data definitions
             if self.is_data_value(['data',"iter"],list):
