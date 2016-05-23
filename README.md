@@ -17,10 +17,7 @@ It will need the pytz package: https://pypi.python.org/pypi/pytz/
 
 Run: `sudo ./setup.py install` to install it into your Python2 module tree
 
-Further documentation will follow, but to give an indication, a short list of keywords.  
-See also the source definition files at  
-https://github.com/tvgrabbers/tvgrabnlpy/tree/tvgrabnlpy3/sources.  
-Check the secundary "data" items:    
+Check [the WIKI](https://github.com/tvgrabbers/DataTree/wiki) for the syntax. Here a short list of possible keywords:      
 ###path-dict keywords:
  * "path": "all", "root", "parent"
  * "key":<name>
