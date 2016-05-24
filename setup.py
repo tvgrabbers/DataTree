@@ -9,18 +9,11 @@ list of keyNodes and extract for each of them the same data-list. During the
 extraction several data manipulation functions are available.'''
 
 from distutils.core import setup
-from DataTreeGrab import version
-
-dtv = '%s.%s.%s' % (version()[1],version()[2],version()[3])
-if version()[6]:
-    dtv = '%s-alfa' % (dtv)
-
-elif version()[5]:
-    dtv = '%s-beta' % (dtv)
+from DataTreeGrab import version, __version__
 
 setup(
     name = version()[0],
-    version = dtv,
+    version = __version__,
     description = 'Node-Tree based data extraction',
     py_modules = ['DataTreeGrab'],
     requires = ['pytz'],

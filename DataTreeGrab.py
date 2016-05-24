@@ -49,6 +49,13 @@ dt_patchdate = u'20160523'
 dt_alfa = False
 dt_beta = True
 
+__version__  = '%s.%s.%s' % (dt_major,dt_minor,dt_patch)
+if dt_alfa:
+    __version__ = '%s-alfa' % (__version__)
+
+elif dt_beta:
+    __version__ = '%s-beta' % (__version__)
+
 def version():
     return (dt_name, dt_major, dt_minor, dt_patch, dt_patchdate, dt_beta, dt_alfa)
 # end version()
