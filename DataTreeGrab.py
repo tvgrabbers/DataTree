@@ -710,23 +710,27 @@ class DATAtree():
                 # We return True if exactly one node is found, else False
                 return bool(isinstance(nlist, DATAnode) or (isinstance(nlist, list) and len(nlist) == 1 and  isinstance(nlist[0], DATAnode)))
 
-            # Nothing found, so give the default or None
             if nlist in ([], None):
+                # Nothing found, so give the default or None
                 if self.data_value('type', None, path_def[-1]) == 'list':
                     return []
 
                 else:
                     return self.data_value('default', None, path_def[-1])
 
+            if self.is_data_value('first', None, path_def[-1]) and isinstance(nlist, list):
+                # There is a request to only return the first
+                nlist = nlist[0]
+
             # We found multiple values
-            elif len(nlist) > 1 or (isinstance(path_def, list) and len(path_def)>0 and self.data_value('type', None, path_def[-1]) == 'list'):
+            if (isinstance(nlist, list) and len(nlist) > 1) or (self.data_value('type', None, path_def[-1]) == 'list'):
                 vlist = []
                 for node in nlist:
                     if isinstance(node, DATAnode):
                         vlist.append(node.find_value(path_def[-1]))
 
-                    # There is a named subset of the found nodes
                     elif isinstance(node, dict):
+                        # There is a named subset of the found nodes
                         for k, v in node.items():
                             slist = []
                             for item in v:
@@ -738,7 +742,10 @@ class DATAtree():
                 return vlist
 
             # We found one value
-            if not isinstance(nlist[0], DATAnode):
+            if isinstance(nlist, list):
+                nlist = nlist[0]
+
+            if not isinstance(nlist, DATAnode):
                 if isinstance(path_def, list) and len(path_def)>0:
                     if self.data_value('type', None, path_def[-1]) == 'list':
                         return []
@@ -747,7 +754,7 @@ class DATAtree():
                         return self.data_value('default', None, path_def[-1])
 
             else:
-                return nlist[0].find_value(path_def[-1])
+                return nlist.find_value(path_def[-1])
 
     def extract_datalist(self, data_def=None):
         with self.tree_lock:
