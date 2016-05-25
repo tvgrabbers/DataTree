@@ -896,7 +896,8 @@ class DATAtree():
                         #~ traceback.print_exc()
                         pass
 
-        if self.is_data_value('multiplier', int, node_def):
+        if self.is_data_value('multiplier', int, node_def) and not self.data_value('type', unicode, node_def) in ('timestamp', 'datestamp'):
+
             try:
                 value = int(value) * node_def['multiplier']
 
@@ -935,11 +936,11 @@ class DATAtree():
         if self.is_data_value('type', unicode, node_def):
             try:
                 if node_def['type'] == 'timestamp':
-                    #~ val = value
-                    #~ if self.is_data_value('multiplier', int, node_def):
-                        #~ val = value/node_def['multiplier']
+                    val = value
+                    if self.is_data_value('multiplier', int, node_def):
+                        val = value/node_def['multiplier']
 
-                    value = datetime.datetime.fromtimestamp(float(value), self.utc)
+                    value = datetime.datetime.fromtimestamp(float(val), self.utc)
 
                 elif node_def['type'] == 'datetimestring':
                     dts = self.datetimestring
@@ -1020,11 +1021,11 @@ class DATAtree():
 
 
                 elif node_def['type'] == 'datestamp':
-                    #~ val = value
-                    #~ if self.is_data_value('multiplier', int, node_def):
-                        #~ val = value/node_def['multiplier']
+                    val = value
+                    if self.is_data_value('multiplier', int, node_def):
+                        val = value/node_def['multiplier']
 
-                    value = datetime.date.fromtimestamp(float(value))
+                    value = datetime.date.fromtimestamp(float(val))
 
                 elif node_def['type'] == 'relative-weekday':
                     if value.strip().lower() in self.relative_weekdays.keys():
