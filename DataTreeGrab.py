@@ -105,7 +105,7 @@ class DATAnode():
             return [self]
 
         nm = self.find_name(d_def[0])
-        if self.match_node(node_def = d_def[0], link_values=link_values) == None:
+        if self.match_node(node_def = d_def[0], link_values=link_values, last_node_def = True) == None:
             # It's not a child definition
             if len(d_def) == 1:
                 if self.dtree.show_result:
@@ -227,9 +227,9 @@ class DATAnode():
         if self.dtree.is_data_value('link', int, node_def):
             self.link_value[node_def['link']] = self.find_value(node_def)
             if self.dtree.show_result:
-                self.dtree.print_text(u'    saving link to node %s: %s\n'.encode('utf-8', 'replace') % (self.find_value(node_def), self.print_node()))
+                self.dtree.print_text(u'    saving link to node %s: %s\n      %s\n'.encode('utf-8', 'replace') % (self.find_value(node_def), self.print_node(), node_def))
 
-    def match_node(self, node_def = None, link_values = None):
+    def match_node(self, node_def = None, link_values = None, last_node_def = False):
         self.link_value = {}
         return False
 
@@ -293,7 +293,30 @@ class HTMLnode(DATAnode):
 
         return childs
 
-    def match_node(self, tag = None, attributes = None, node_def = None, link_values=None):
+    def match_node(self, tag = None, attributes = None, node_def = None, link_values=None, last_node_def = False):
+        def check_index_link():
+            il = link_values[self.dtree.data_value(['index','link'], int, node_def)]
+            clist = self.dtree.data_value(['index','calc'], list, node_def)
+            if len(clist) == 2 and isinstance(clist[1], int):
+                if clist[0] == 'min':
+                    il -= clist[1]
+
+                elif clist[0] == 'plus':
+                    il += clist[1]
+
+            if self.dtree.is_data_value(['index','previous'], None, node_def):
+                if self.child_index < il:
+                    return True
+
+            if self.dtree.is_data_value(['index','next'], None, node_def):
+                if self.child_index > il:
+                    return True
+
+            if self.child_index == il:
+                return True
+
+            return False
+
         self.link_value = {}
         if not isinstance(attributes,list):
             attributes = []
@@ -323,16 +346,7 @@ class HTMLnode(DATAnode):
                 # The tag matches
                 if self.dtree.is_data_value(['index','link'], int, node_def):
                     # There is an index request to an earlier linked index
-                    il = link_values[self.dtree.data_value(['index','link'], int, node_def)]
-                    clist = self.dtree.data_value(['index','calc'], list, node_def)
-                    if len(clist) == 2 and isinstance(clist[1], int):
-                        if clist[0] == 'min':
-                            il -= clist[1]
-
-                        elif clist[0] == 'plus':
-                            il += clist[1]
-
-                    if self.child_index != il:
+                    if not check_index_link():
                         return False
 
                 elif self.dtree.is_data_value(['index'], int, node_def):
@@ -343,19 +357,10 @@ class HTMLnode(DATAnode):
             else:
                 return False
 
-        elif self.dtree.is_data_value(['index'], None, node_def):
-            if self.dtree.is_data_value(['index','link'], int, node_def):
+        elif self.dtree.is_data_value('index', None, node_def):
+            if self.dtree.is_data_value(['index','link'], int, node_def) and self.dtree.data_value(['index','link'], int, node_def) in link_values.keys():
                 # There is an index request to an earlier linked index
-                il = link_values[self.dtree.data_value(['index','link'], int, node_def)]
-                clist = self.dtree.data_value(['index','calc'], list, node_def)
-                if len(clist) == 2 and isinstance(clist[1], int):
-                    if clist[0] == 'min':
-                        il -= clist[1]
-
-                    elif clist[0] == 'plus':
-                        il += clist[1]
-
-                if self.child_index != il:
+                if not check_index_link():
                     return False
 
             elif self.dtree.is_data_value(['index'], int, node_def):
@@ -367,11 +372,15 @@ class HTMLnode(DATAnode):
                 return False
 
         elif self.dtree.is_data_value('path', None, node_def):
-            self.check_for_linkrequest(node_def)
+            if not last_node_def:
+                self.check_for_linkrequest(node_def)
+
             return False
 
         else:
-            self.check_for_linkrequest(node_def)
+            if last_node_def:
+                self.check_for_linkrequest(node_def)
+
             return None
 
         if self.dtree.is_data_value('text', str, node_def):
@@ -384,7 +393,9 @@ class HTMLnode(DATAnode):
 
         if not self.dtree.is_data_value('attrs', dict, node_def):
             # And there are no attrib matches requested
-            self.check_for_linkrequest(node_def)
+            if not last_node_def:
+                self.check_for_linkrequest(node_def)
+
             return True
 
         for a, v in node_def['attrs'].items():
@@ -394,7 +405,7 @@ class HTMLnode(DATAnode):
                     if self.is_attribute(a) and self.attributes[a] == val:
                         return False
 
-            elif self.dtree.is_data_value('link', int, v):
+            elif self.dtree.is_data_value('link', int, v) and v["link"] in link_values.keys():
                 # The requested value is in link_values
                 if not self.is_attribute(a, link_values[v["link"]]):
                     return False
@@ -402,7 +413,9 @@ class HTMLnode(DATAnode):
             elif not self.is_attribute(a, v):
                 return False
 
-        self.check_for_linkrequest(node_def)
+        if not last_node_def:
+            self.check_for_linkrequest(node_def)
+
         return True
 
     def find_name(self, node_def):
@@ -468,6 +481,7 @@ class HTMLnode(DATAnode):
             attributes = attributes[:-(len(spc)+6)]
 
         rstr = u'%s: %s(%s)' % (self.level, self.tag, attributes)
+        rstr = u'%s\n    %sindex: %s' % (rstr, spc, self.child_index)
         if print_all:
             if self.text != '':
                 rstr = u'%s\n    %stext: %s' % (rstr, spc, self.text)
@@ -519,7 +533,7 @@ class JSONnode(DATAnode):
 
         return None
 
-    def match_node(self, node_def = None, link_values = None):
+    def match_node(self, node_def = None, link_values = None, last_node_def = False):
         self.link_value = {}
         if not isinstance(link_values, dict):
             link_values ={}
@@ -527,7 +541,9 @@ class JSONnode(DATAnode):
         if self.dtree.is_data_value('key', None, node_def):
             if self.key == node_def["key"]:
                 # The requested key matches
-                self.check_for_linkrequest(node_def)
+                if not last_node_def:
+                    self.check_for_linkrequest(node_def)
+
                 return True
 
             return False
@@ -535,7 +551,9 @@ class JSONnode(DATAnode):
         elif self.dtree.is_data_value('keys', list, node_def):
             if self.key in node_def['keys']:
                 # This key is in the list with requested keys
-                self.check_for_linkrequest(node_def)
+                if not last_node_def:
+                    self.check_for_linkrequest(node_def)
+
                 return True
 
             return False
@@ -554,10 +572,12 @@ class JSONnode(DATAnode):
                 if self.get_child(item).value != val:
                     return False
 
-            self.check_for_linkrequest(node_def)
+            if not last_node_def:
+                self.check_for_linkrequest(node_def)
+
             return True
 
-        elif self.dtree.is_data_value(['index','link'], int, node_def):
+        elif self.dtree.is_data_value(['index','link'], int, node_def) and self.dtree.data_value(['index','link'], int, node_def) in link_values.keys():
             # There is an index request to an earlier linked index
             il = link_values[self.dtree.data_value(['index','link'], int, node_def)]
             clist = self.dtree.data_value(['index','calc'], list, node_def)
@@ -568,6 +588,12 @@ class JSONnode(DATAnode):
                 elif clist[0] == 'plus':
                     il += clist[1]
 
+            if self.dtree.is_data_value(['index','previous'], None, node_def) and self.child_index < il:
+                return True
+
+            if self.dtree.is_data_value(['index','next'], None, node_def) and self.child_index > il:
+                return True
+
             if self.child_index == il:
                 return True
 
@@ -577,18 +603,24 @@ class JSONnode(DATAnode):
         elif self.dtree.is_data_value(['index'], int, node_def):
             # There is an index request to a set value
             if self.child_index == self.dtree.data_value(['index'], int, node_def):
-                self.check_for_linkrequest(node_def)
+                if not last_node_def:
+                    self.check_for_linkrequest(node_def)
+
                 return True
 
             else:
                 return False
 
         elif self.dtree.is_data_value('path', None, node_def):
-            self.check_for_linkrequest(node_def)
+            if not last_node_def:
+                self.check_for_linkrequest(node_def)
+
             return False
 
         else:
-            self.check_for_linkrequest(node_def)
+            if last_node_def:
+                self.check_for_linkrequest(node_def)
+
             return None
 
     def find_name(self, node_def):
@@ -721,6 +753,10 @@ class DATAtree():
             if self.is_data_value('first', None, path_def[-1]) and isinstance(nlist, list):
                 # There is a request to only return the first
                 nlist = nlist[0]
+
+            elif self.is_data_value('last', None, path_def[-1]) and isinstance(nlist, list):
+                # There is a request to only return the last
+                nlist = nlist[-1]
 
             # We found multiple values
             if (isinstance(nlist, list) and len(nlist) > 1) or (self.data_value('type', None, path_def[-1]) == 'list'):
