@@ -1379,6 +1379,10 @@ class HTMLtree(HTMLParser, DATAtree):
             self.handle_endtag(tag)
 
     def handle_data(self, data):
+        data = re.sub("", "...", data)
+        data = re.sub("", "'", data)
+        data = re.sub("", "'", data)
+        data = re.sub("", "", data)
         self.text += data
 
     def handle_entityref(self, name):
