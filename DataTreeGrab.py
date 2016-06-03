@@ -295,7 +295,15 @@ class HTMLnode(DATAnode):
 
     def match_node(self, tag = None, attributes = None, node_def = None, link_values=None, last_node_def = False):
         def check_index_link():
+            if not self.dtree.data_value(['index','link'], int, node_def) in link_values.keys():
+                sys.stderr.write('You requested an index link, but link value %s is not stored!\n' % self.dtree.data_value(['index','link'], int, node_def))
+                return False
+
             il = link_values[self.dtree.data_value(['index','link'], int, node_def)]
+            if not isinstance(il, int):
+                sys.stderr.write('You requested an index link, but the stored value is no integer!\n')
+                return False
+
             clist = self.dtree.data_value(['index','calc'], list, node_def)
             if len(clist) == 2 and isinstance(clist[1], int):
                 if clist[0] == 'min':
@@ -358,7 +366,7 @@ class HTMLnode(DATAnode):
                 return False
 
         elif self.dtree.is_data_value('index', None, node_def):
-            if self.dtree.is_data_value(['index','link'], int, node_def) and self.dtree.data_value(['index','link'], int, node_def) in link_values.keys():
+            if self.dtree.is_data_value(['index','link'], int, node_def):
                 # There is an index request to an earlier linked index
                 if not check_index_link():
                     return False
@@ -577,9 +585,17 @@ class JSONnode(DATAnode):
 
             return True
 
-        elif self.dtree.is_data_value(['index','link'], int, node_def) and self.dtree.data_value(['index','link'], int, node_def) in link_values.keys():
+        elif self.dtree.is_data_value(['index','link'], int, node_def):
             # There is an index request to an earlier linked index
+            if not self.dtree.data_value(['index','link'], int, node_def) in link_values.keys():
+                sys.stderr.write('You requested an index link, but link value %s is not stored!\n' % self.dtree.data_value(['index','link'], int, node_def))
+                return False
+
             il = link_values[self.dtree.data_value(['index','link'], int, node_def)]
+            if not isinstance(il, int):
+                sys.stderr.write('You requested an index link, but the stored value is no integer!\n')
+                return False
+
             clist = self.dtree.data_value(['index','calc'], list, node_def)
             if len(clist) == 2 and isinstance(clist[1], int):
                 if clist[0] == 'min':
