@@ -256,6 +256,7 @@ class HTMLnode(DATAnode):
         self.text = u''
         self.tail = u''
         self.attributes = {}
+        self.attr_names = []
         DATAnode.__init__(self, dtree, parent)
         with self.node_lock:
             if isinstance(data, (str, unicode)):
@@ -268,6 +269,16 @@ class HTMLnode(DATAnode):
                 if len(data) > 1 and isinstance(data[1], (list, tuple)):
                     for a in data[1]:
                         self.attributes[a[0].lower()] = a[1]
+
+                    if 'class' in self.attributes.keys():
+                        self.attr_names.append('class')
+
+                    if 'id' in self.attributes.keys():
+                        self.attr_names.append('id')
+
+                    for a in self.attributes.keys():
+                        if a not in self.attr_names:
+                            self.attr_names.append(a)
 
     def get_attribute(self, name):
         if name.lower() in self.attributes.keys():
@@ -480,12 +491,12 @@ class HTMLnode(DATAnode):
         attributes = u''
         spc = self.dtree.get_leveltabs(self.level,4)
         if len(self.attributes) > 0:
-            for a, v in self.attributes.items():
-                vv = v
+            for a in self.attr_names:
+                v = self.attributes[a]
                 if isinstance(v, (str,unicode)):
-                    vv = re.sub('\r','', v)
-                    vv = re.sub('\n', ' ', vv)
-                attributes = u'%s%s = "%s",\n    %s' % (attributes, a, vv, spc)
+                    v = re.sub('\r','', v)
+                    v = re.sub('\n', ' ', v)
+                attributes = u'%s%s = "%s",\n    %s' % (attributes, a, v, spc)
             attributes = attributes[:-(len(spc)+6)]
 
         rstr = u'%s: %s(%s)' % (self.level, self.tag, attributes)
@@ -957,9 +968,9 @@ class DATAtree():
                 #~ traceback.print_exc()
                 pass
 
-        if self.is_data_value('divider', int, node_def):
+        if self.is_data_value('divider', int, node_def) and node_def['divider'] != 0:
             try:
-                value = int(value) / node_def['divider']
+                value = int(value) // node_def['divider']
 
             except:
                 #~ traceback.print_exc()
