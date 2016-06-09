@@ -7,9 +7,10 @@ It is at the heart of the tv_grab_py_API and was initially named just DataTree,
 but as this name is already taken in the Python library...
 
 It reads the page into a Node based tree, from which you, on the bases of a json  
-data-file, can extract your data into a list of items. It can first extract a  
-list of keyNodes and extract for each of them the same data-list. During the  
-extraction several data manipulation functions are available.  
+data-file, can extract your data into a list of items. For this a special [Data_def language](https://github.com/tvgrabbers/DataTree/wiki/data_def_language)  
+has been developed. It can first extract a list of keyNodes and extract for each  
+of them the same data-list. During the extraction several data manipulation  
+functions are available.  
 
 The current install will only install under Python 2. It probably will run under  
 Python 3 but is not jet tested. It is still considered beta  
