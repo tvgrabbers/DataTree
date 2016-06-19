@@ -60,6 +60,86 @@ def version():
     return (dt_name, dt_major, dt_minor, dt_patch, dt_patchdate, dt_beta, dt_alfa)
 # end version()
 
+def is_data_value(searchpath, searchtree, dtype = None, empty_is_false = False):
+    """
+    Follow searchpath through the datatree in searchtree
+    and report if there exists a value of type dtype
+    searchpath is a list of keys/indices
+    If dtype is None check for any value
+    """
+    if isinstance(searchpath, (str, unicode, int)):
+        searchpath = [searchpath]
+
+    if not isinstance(searchpath, (list, tuple)):
+        return False
+
+    for d in searchpath:
+        if isinstance(searchtree, dict):
+            if not d in searchtree.keys():
+                return False
+
+        elif isinstance(searchtree, (list, tuple)):
+            if (not isinstance(d, int) or d >= len(searchtree)):
+                return False
+
+        else:
+            return False
+
+        searchtree = searchtree[d]
+
+    if empty_is_false and searchtree in (None, "", {}, []):
+        return False
+
+    if dtype == None:
+        return True
+
+    if dtype == float:
+        return bool(isinstance(searchtree, (float, int)))
+
+    if dtype in (str, unicode, 'string'):
+        return bool(isinstance(searchtree, (str, unicode)))
+
+    if dtype in (list, tuple, 'list'):
+        return bool(isinstance(searchtree, (list, tuple)))
+
+    return bool(isinstance(searchtree, dtype))
+# end is_data_value()
+
+def data_value(searchpath, searchtree, dtype = None, default = None):
+    """
+    Follow searchpath through the datatree in searchtree
+    and return if it exists a value of type dtype
+    searchpath is a list of keys/indices
+    If dtype is None check for any value
+    If it is not found return default or if dtype is set to
+    a string, list or dict, an empty one
+    """
+    if is_data_value(searchpath, searchtree, dtype):
+        if isinstance(searchpath, (str, unicode, int)):
+            searchpath = [searchpath]
+
+        for d in searchpath:
+            searchtree = searchtree[d]
+
+    else:
+        searchtree = None
+
+    if searchtree == None:
+        if default != None:
+            return default
+
+        elif dtype in (str, unicode):
+            return ""
+
+        elif dtype == dict:
+            return {}
+
+        elif dtype in (list, tuple):
+            return []
+
+    return searchtree
+# end data_value()
+
 class NULLnode():
     value = None
 
@@ -130,7 +210,7 @@ class DATAnode():
                 else:
                     return self.tag,{nm:childs}
 
-        elif self.dtree.is_data_value('path', None, d_def[0]):
+        elif is_data_value('path', d_def[0]):
             sel_val = d_def[0]['path']
             if sel_val == 'parent' and not self.is_root:
                 if self.dtree.show_result:
@@ -224,7 +304,7 @@ class DATAnode():
             return {nm:childs}
 
     def check_for_linkrequest(self, node_def):
-        if self.dtree.is_data_value('link', int, node_def):
+        if is_data_value('link', node_def, int):
             self.link_value[node_def['link']] = self.find_value(node_def)
             if self.dtree.show_result:
                 self.dtree.print_text(u'    saving link to node %s: %s\n      %s\n'.encode('utf-8', 'replace') % (self.find_value(node_def), self.print_node(), node_def))
@@ -306,16 +386,16 @@ class HTMLnode(DATAnode):
 
     def match_node(self, tag = None, attributes = None, node_def = None, link_values=None, last_node_def = False):
         def check_index_link():
-            if not self.dtree.data_value(['index','link'], int, node_def) in link_values.keys():
-                sys.stderr.write('You requested an index link, but link value %s is not stored!\n' % self.dtree.data_value(['index','link'], int, node_def))
+            if not data_value(['index','link'], node_def, int) in link_values.keys():
+                sys.stderr.write('You requested an index link, but link value %s is not stored!\n' % data_value(['index','link'], node_def, int))
                 return False
 
-            il = link_values[self.dtree.data_value(['index','link'], int, node_def)]
+            il = link_values[data_value(['index','link'], node_def, int)]
             if not isinstance(il, int):
                 sys.stderr.write('You requested an index link, but the stored value is no integer!\n')
                 return False
 
-            clist = self.dtree.data_value(['index','calc'], list, node_def)
+            clist = data_value(['index','calc'], node_def, list)
             if len(clist) == 2 and isinstance(clist[1], int):
                 if clist[0] == 'min':
                     il -= clist[1]
@@ -323,11 +403,11 @@ class HTMLnode(DATAnode):
                 elif clist[0] == 'plus':
                     il += clist[1]
 
-            if self.dtree.is_data_value(['index','previous'], None, node_def):
+            if is_data_value(['index','previous'], node_def):
                 if self.child_index < il:
                     return True
 
-            if self.dtree.is_data_value(['index','next'], None, node_def):
+            if is_data_value(['index','next'], node_def):
                 if self.child_index > il:
                     return True
 
@@ -360,37 +440,37 @@ class HTMLnode(DATAnode):
             else:
                 return False
 
-        elif self.dtree.is_data_value('tag', None, node_def):
+        elif is_data_value('tag', node_def):
             if node_def['tag'].lower() in (None, self.tag.lower()):
                 # The tag matches
-                if self.dtree.is_data_value(['index','link'], int, node_def):
+                if is_data_value(['index','link'], node_def, int):
                     # There is an index request to an earlier linked index
                     if not check_index_link():
                         return False
 
-                elif self.dtree.is_data_value(['index'], int, node_def):
+                elif is_data_value(['index'], node_def, int):
                     # There is an index request to a set value
-                    if self.child_index != self.dtree.data_value(['index'], int, node_def):
+                    if self.child_index != data_value(['index'], node_def, int):
                         return False
 
             else:
                 return False
 
-        elif self.dtree.is_data_value('index', None, node_def):
-            if self.dtree.is_data_value(['index','link'], int, node_def):
+        elif is_data_value('index', node_def):
+            if is_data_value(['index','link'], node_def, int):
                 # There is an index request to an earlier linked index
                 if not check_index_link():
                     return False
 
-            elif self.dtree.is_data_value(['index'], int, node_def):
+            elif is_data_value(['index'], node_def, int):
                 # There is an index request to a set value
-                if self.child_index != self.dtree.data_value(['index'], int, node_def):
+                if self.child_index != data_value(['index'], node_def, int):
                     return False
 
             else:
                 return False
 
-        elif self.dtree.is_data_value('path', None, node_def):
+        elif is_data_value('path', node_def):
             if not last_node_def:
                 self.check_for_linkrequest(node_def)
 
@@ -402,15 +482,15 @@ class HTMLnode(DATAnode):
 
             return None
 
-        if self.dtree.is_data_value('text', str, node_def):
+        if is_data_value('text', node_def, str):
             if node_def['text'].lower() != self.text.lower():
                 return False
 
-        if self.dtree.is_data_value('tail', str, node_def):
+        if is_data_value('tail', node_def, str):
             if node_def['tail'].lower() != self.tail.lower():
                 return False
 
-        if not self.dtree.is_data_value('attrs', dict, node_def):
+        if not is_data_value('attrs', node_def, dict):
             # And there are no attrib matches requested
             if not last_node_def:
                 self.check_for_linkrequest(node_def)
@@ -418,13 +498,13 @@ class HTMLnode(DATAnode):
             return True
 
         for a, v in node_def['attrs'].items():
-            if self.dtree.is_data_value('not', list, v):
+            if is_data_value('not', v, list):
                 # There is a negative attrib match requested
                 for val in v['not']:
                     if self.is_attribute(a) and self.attributes[a] == val:
                         return False
 
-            elif self.dtree.is_data_value('link', int, v) and v["link"] in link_values.keys():
+            elif is_data_value('link', v, int) and v["link"] in link_values.keys():
                 # The requested value is in link_values
                 if not self.is_attribute(a, link_values[v["link"]]):
                     return False
@@ -439,8 +519,8 @@ class HTMLnode(DATAnode):
 
     def find_name(self, node_def):
         sv = None
-        if self.dtree.is_data_value('name', dict, node_def):
-            if self.dtree.is_data_value(['name','select'], str, node_def):
+        if is_data_value('name', node_def, dict):
+            if is_data_value(['name','select'], node_def, str):
                 if node_def[ 'name']['select'] == 'tag':
                     sv = self.tag
 
@@ -450,20 +530,20 @@ class HTMLnode(DATAnode):
                 elif node_def[ 'name']['select'] == 'tail':
                     sv = self.tail
 
-            elif self.dtree.is_data_value(['name','attr'], str, node_def):
+            elif is_data_value(['name','attr'], node_def, str):
                 sv = self.get_attribute(node_def['name'][ 'attr'].lower())
 
         if sv != None:
             return self.dtree.calc_value(sv, node_def['name'])
 
     def find_value(self, node_def = None):
-        if self.dtree.is_data_value('value', None, node_def):
+        if is_data_value('value', node_def):
             sv = node_def['value']
 
-        elif self.dtree.is_data_value('attr', str, node_def):
+        elif is_data_value('attr', node_def, str):
             sv = self.get_attribute(node_def[ 'attr'].lower())
 
-        elif self.dtree.is_data_value('select', str, node_def):
+        elif is_data_value('select', node_def, str):
             if node_def[ 'select'] == 'index':
                 sv = self.child_index
 
@@ -557,7 +637,7 @@ class JSONnode(DATAnode):
         if not isinstance(link_values, dict):
             link_values ={}
 
-        if self.dtree.is_data_value('key', None, node_def):
+        if is_data_value('key', node_def):
             if self.key == node_def["key"]:
                 # The requested key matches
                 if not last_node_def:
@@ -567,7 +647,7 @@ class JSONnode(DATAnode):
 
             return False
 
-        elif self.dtree.is_data_value('keys', list, node_def):
+        elif is_data_value('keys', node_def, list):
             if self.key in node_def['keys']:
                 # This key is in the list with requested keys
                 if not last_node_def:
@@ -577,14 +657,14 @@ class JSONnode(DATAnode):
 
             return False
 
-        elif self.dtree.is_data_value('keys', dict, node_def):
+        elif is_data_value('keys', node_def, dict):
             # Does it contain the requested key/value pairs
             for item, v in node_def["keys"].items():
                 if not item in self.keys:
                     return False
 
                 val = v
-                if self.dtree.is_data_value('link', int, v) and v["link"] in link_values.keys():
+                if is_data_value('link', v, int) and v["link"] in link_values.keys():
                     # The requested value is in link_values
                     val = link_values[v["link"]]
 
@@ -596,18 +676,18 @@ class JSONnode(DATAnode):
 
             return True
 
-        elif self.dtree.is_data_value(['index','link'], int, node_def):
+        elif is_data_value(['index','link'], node_def, int):
             # There is an index request to an earlier linked index
-            if not self.dtree.data_value(['index','link'], int, node_def) in link_values.keys():
-                sys.stderr.write('You requested an index link, but link value %s is not stored!\n' % self.dtree.data_value(['index','link'], int, node_def))
+            if not data_value(['index','link'], node_def, int) in link_values.keys():
+                sys.stderr.write('You requested an index link, but link value %s is not stored!\n' % data_value(['index','link'], node_def, int))
                 return False
 
-            il = link_values[self.dtree.data_value(['index','link'], int, node_def)]
+            il = link_values[data_value(['index','link'], node_def, int)]
             if not isinstance(il, int):
                 sys.stderr.write('You requested an index link, but the stored value is no integer!\n')
                 return False
 
-            clist = self.dtree.data_value(['index','calc'], list, node_def)
+            clist = data_value(['index','calc'], node_def, list)
             if len(clist) == 2 and isinstance(clist[1], int):
                 if clist[0] == 'min':
                     il -= clist[1]
@@ -615,10 +695,10 @@ class JSONnode(DATAnode):
                 elif clist[0] == 'plus':
                     il += clist[1]
 
-            if self.dtree.is_data_value(['index','previous'], None, node_def) and self.child_index < il:
+            if is_data_value(['index','previous'], node_def) and self.child_index < il:
                 return True
 
-            if self.dtree.is_data_value(['index','next'], None, node_def) and self.child_index > il:
+            if is_data_value(['index','next'], node_def) and self.child_index > il:
                 return True
 
             if self.child_index == il:
@@ -627,9 +707,9 @@ class JSONnode(DATAnode):
             else:
                 return False
 
-        elif self.dtree.is_data_value(['index'], int, node_def):
+        elif is_data_value(['index'], node_def, int):
             # There is an index request to a set value
-            if self.child_index == self.dtree.data_value(['index'], int, node_def):
+            if self.child_index == data_value(['index'], node_def, int):
                 if not last_node_def:
                     self.check_for_linkrequest(node_def)
 
@@ -638,7 +718,7 @@ class JSONnode(DATAnode):
             else:
                 return False
 
-        elif self.dtree.is_data_value('path', None, node_def):
+        elif is_data_value('path', node_def):
             if not last_node_def:
                 self.check_for_linkrequest(node_def)
 
@@ -652,8 +732,8 @@ class JSONnode(DATAnode):
 
     def find_name(self, node_def):
         sv = None
-        if self.dtree.is_data_value('name', dict, node_def):
-            if self.dtree.is_data_value(['name','select'], str, node_def):
+        if is_data_value('name', node_def, dict):
+            if is_data_value(['name','select'], node_def, str):
                 if node_def[ 'name']['select'] == 'key':
                     sv = self.key
 
@@ -664,10 +744,10 @@ class JSONnode(DATAnode):
             return self.dtree.calc_value(sv, node_def[ 'name'])
 
     def find_value(self, node_def = None):
-        if self.dtree.is_data_value('value', None, node_def):
+        if is_data_value('value', node_def):
             sv = node_def['value']
 
-        elif self.dtree.is_data_value('select', None, node_def):
+        elif is_data_value('select', node_def):
             if node_def[ 'select'] == 'index':
                 sv = self.child_index
 
@@ -765,28 +845,28 @@ class DATAtree():
                 start_node = self.start_node
 
             nlist = start_node.get_children(path_def = path_def, link_values = link_values)
-            if self.data_value('select', str, path_def[-1]) == 'presence':
+            if data_value('select', path_def[-1], str) == 'presence':
                 # We return True if exactly one node is found, else False
                 return bool(isinstance(nlist, DATAnode) or (isinstance(nlist, list) and len(nlist) == 1 and  isinstance(nlist[0], DATAnode)))
 
             if nlist in ([], None):
                 # Nothing found, so give the default or None
-                if self.data_value('type', None, path_def[-1]) == 'list':
+                if data_value('type', path_def[-1]) == 'list':
                     return []
 
                 else:
-                    return self.data_value('default', None, path_def[-1])
+                    return data_value('default', path_def[-1])
 
-            if self.is_data_value('first', None, path_def[-1]) and isinstance(nlist, list):
+            if is_data_value('first', path_def[-1]) and isinstance(nlist, list):
                 # There is a request to only return the first
                 nlist = nlist[0]
 
-            elif self.is_data_value('last', None, path_def[-1]) and isinstance(nlist, list):
+            elif is_data_value('last', path_def[-1]) and isinstance(nlist, list):
                 # There is a request to only return the last
                 nlist = nlist[-1]
 
             # We found multiple values
-            if (isinstance(nlist, list) and len(nlist) > 1) or (self.data_value('type', None, path_def[-1]) == 'list'):
+            if (isinstance(nlist, list) and len(nlist) > 1) or (data_value('type', path_def[-1]) == 'list'):
                 vlist = []
                 for node in nlist:
                     if isinstance(node, DATAnode):
@@ -810,11 +890,11 @@ class DATAtree():
 
             if not isinstance(nlist, DATAnode):
                 if isinstance(path_def, list) and len(path_def)>0:
-                    if self.data_value('type', None, path_def[-1]) == 'list':
+                    if data_value('type', path_def[-1]) == 'list':
                         return []
 
                     else:
-                        return self.data_value('default', None, path_def[-1])
+                        return data_value('default', path_def[-1])
 
             else:
                 return nlist.find_value(path_def[-1])
@@ -842,8 +922,8 @@ class DATAtree():
 
             for dset in def_list:
                 # Get all the key nodes
-                if self.is_data_value(["key-path"], list, dset):
-                    kp = self.data_value(["key-path"], list, dset)
+                if is_data_value(["key-path"], dset, list):
+                    kp = data_value(["key-path"], dset, list)
                     if len(kp) == 0:
                         continue
 
@@ -858,16 +938,16 @@ class DATAtree():
                         # And if it's a valid node, find the belonging values (the last dict in a path list contains the value definition)
                         tlist = [k.find_value(kp[-1])]
                         link_values = {}
-                        if self.is_data_value('link', int, kp[-1]):
+                        if is_data_value('link', kp[-1], int):
                             link_values = {kp[-1]["link"]: k.find_value(kp[-1])}
 
-                        for v in self.data_value(["values"], list, dset):
+                        for v in data_value(["values"], dset, list):
                             if not isinstance(v, list) or len(v) == 0:
                                 tlist.append(None)
                                 continue
 
-                            if self.is_data_value('value',None, v[0]):
-                                tlist.append(self.data_value('value',None, v[0]))
+                            if is_data_value('value', v[0]):
+                                tlist.append(data_value('value',v[0]))
                                 continue
 
                             if self.show_result:
@@ -890,16 +970,16 @@ class DATAtree():
     def calc_value(self, value, node_def = None):
         if isinstance(value, (str, unicode)):
             # Is there something to strip of
-            if self.is_data_value('lower', None, node_def):
+            if is_data_value('lower',  node_def):
                 value = unicode(value).lower().strip()
 
-            if self.is_data_value('upper', None, node_def):
+            if is_data_value('upper',  node_def):
                 value = unicode(value).upper().strip()
 
-            if self.is_data_value('capitalize', None, node_def):
+            if is_data_value('capitalize',  node_def):
                 value = unicode(value).capitalize().strip()
 
-            if self.is_data_value('ascii-replace', list, node_def) and len(node_def['ascii-replace']) > 0:
+            if is_data_value('ascii-replace', node_def, list) and len(node_def['ascii-replace']) > 0:
                 arep = node_def['ascii-replace']
                 value = value.lower()
                 if len(arep) > 2:
@@ -908,28 +988,28 @@ class DATAtree():
                 value = value.encode('ascii','replace')
                 value = re.sub('\?', arep[0], value)
 
-            if self.is_data_value('lstrip', str, node_def):
+            if is_data_value('lstrip', node_def, str):
                 if value.strip().lower()[:len(node_def['lstrip'])] == node_def['lstrip'].lower():
                     value = unicode(value[len(node_def['lstrip']):]).strip()
 
-            if self.is_data_value('rstrip', str, node_def):
+            if is_data_value('rstrip', node_def, str):
                 if value.strip().lower()[-len(node_def['rstrip']):] == node_def['rstrip'].lower():
                     value = unicode(value[:-len(node_def['rstrip'])]).strip()
 
             # Is there something to substitute
-            if self.is_data_value('sub', list, node_def) and len(node_def['sub']) > 1:
+            if is_data_value('sub', node_def, list) and len(node_def['sub']) > 1:
                 for i in range(int(len(node_def['sub'])/2)):
                     value = re.sub(node_def['sub'][i*2], node_def['sub'][i*2+1], value).strip()
 
             #~ # Is there a search regex
-            #~ if self.is_data_value('regex', str, node_def):
+            #~ if is_data_value('regex', node_def, str):
                 #~ try:
                     #~ dd = re.search(node_def['regex'],  value, re.DOTALL)
                         #~ if dd.group(1) not in ('', None):
                             #~ value = dd.group(1)
 
             # Is there a split list
-            if self.is_data_value('split', list, node_def) and len(node_def['split']) > 0:
+            if is_data_value('split', node_def, list) and len(node_def['split']) > 0:
                 if not isinstance(node_def['split'][0],list):
                     slist = [node_def['split']]
 
@@ -959,7 +1039,7 @@ class DATAtree():
                         #~ traceback.print_exc()
                         pass
 
-        if self.is_data_value('multiplier', int, node_def) and not self.data_value('type', unicode, node_def) in ('timestamp', 'datestamp'):
+        if is_data_value('multiplier', node_def, int) and not data_value('type', node_def, unicode) in ('timestamp', 'datestamp'):
 
             try:
                 value = int(value) * node_def['multiplier']
@@ -968,7 +1048,7 @@ class DATAtree():
                 #~ traceback.print_exc()
                 pass
 
-        if self.is_data_value('divider', int, node_def) and node_def['divider'] != 0:
+        if is_data_value('divider', node_def, int) and node_def['divider'] != 0:
             try:
                 value = int(value) // node_def['divider']
 
@@ -977,7 +1057,7 @@ class DATAtree():
                 pass
 
         # Is there a replace dict
-        if self.is_data_value('replace', dict, node_def):
+        if is_data_value('replace', node_def, dict):
             if value == None or not isinstance(value, (str, unicode)):
                 pass
 
@@ -988,7 +1068,7 @@ class DATAtree():
                 value = None
 
         # is there a default
-        if value == None and self.is_data_value('default', None, node_def):
+        if value == None and is_data_value('default', node_def):
             value = node_def['default']
 
         # Make sure a string is unicode and free of HTML entities
@@ -996,19 +1076,19 @@ class DATAtree():
             value = re.sub('\n','', re.sub('\r','', self.un_escape(unicode(value)))).strip()
 
         # is there a type definition in node_def
-        if self.is_data_value('type', unicode, node_def):
+        if is_data_value('type', node_def, unicode):
             try:
                 if node_def['type'] == 'timestamp':
                     val = value
-                    if self.is_data_value('multiplier', int, node_def):
+                    if is_data_value('multiplier', node_def, int):
                         val = value/node_def['multiplier']
 
                     value = datetime.datetime.fromtimestamp(float(val), self.utc)
 
                 elif node_def['type'] == 'datetimestring':
                     dts = self.datetimestring
-                    if self.is_data_value('datetimestring', str, node_def):
-                        dts = self.data_value('datetimestring', str, node_def)
+                    if is_data_value('datetimestring', node_def, str):
+                        dts = data_value('datetimestring', node_def, str)
 
                     date = self.timezone.localize(datetime.datetime.strptime(value, dts))
                     value = self.utc.normalize(date.astimezone(self.utc))
@@ -1016,8 +1096,8 @@ class DATAtree():
                 elif node_def['type'] == 'time':
                     try:
                         ts = self.time_splitter
-                        if self.is_data_value('time-splitter', str, node_def):
-                            ts = self.data_value('time-splitter', str, node_def)
+                        if is_data_value('time-splitter', node_def, str):
+                            ts = data_value('time-splitter', node_def, str)
 
                         t = re.split(ts, value)
                         if len(t) == 2:
@@ -1045,12 +1125,12 @@ class DATAtree():
                         month = current_date.month
                         year = current_date.year
                         ds = self.date_splitter
-                        if self.is_data_value('date-splitter', str, node_def):
-                            ds = self.data_value('date-splitter', str, node_def)
+                        if is_data_value('date-splitter', node_def, str):
+                            ds = data_value('date-splitter', node_def, str)
 
                         dseq = self.date_sequence
-                        if self.is_data_value('date-sequence', list, node_def):
-                            dseq = self.data_value('date-sequence', list, node_def)
+                        if is_data_value('date-sequence', node_def, list):
+                            dseq = data_value('date-sequence', node_def, list)
 
                         d = re.split(ds, value)
                         for index in range(len(d)):
@@ -1085,7 +1165,7 @@ class DATAtree():
 
                 elif node_def['type'] == 'datestamp':
                     val = value
-                    if self.is_data_value('multiplier', int, node_def):
+                    if is_data_value('multiplier', node_def, int):
                         val = value/node_def['multiplier']
 
                     value = datetime.date.fromtimestamp(float(val))
@@ -1160,8 +1240,8 @@ class DATAtree():
                 #~ traceback.print_exc()
                 pass
 
-        if self.is_data_value('member-off', unicode, node_def) and self.data_value('member-off', unicode, node_def) in self.value_filters.keys():
-            vf = self.value_filters[self.data_value('member-off', unicode, node_def)]
+        if is_data_value('member-off', node_def, unicode) and data_value('member-off', node_def, unicode) in self.value_filters.keys():
+            vf = self.value_filters[data_value('member-off', node_def, unicode)]
             if not value in vf:
                 value = NULLnode()
 
@@ -1216,70 +1296,17 @@ class DATAtree():
 
         return sstr
 
-    def is_data_value(self, dpath, dtype = None, subpath = None):
-        if isinstance(dpath, (str, unicode)):
-            dpath = [dpath]
+    def is_data_value(self, searchpath, dtype = None, searchtree = None):
+        if searchtree == None:
+            searchtree = self.data_def
 
-        if not isinstance(dpath, (list, tuple)):
-            return False
+        return is_data_value(searchpath, searchtree, dtype)
 
-        if subpath == None:
-            subpath = self.data_def
+    def data_value(self, searchpath, dtype = None, searchtree = None, default = None):
+        if searchtree == None:
+            searchtree = self.data_def
 
-        for d in dpath:
-            if not isinstance(subpath, dict):
-                return False
-
-            if not d in subpath.keys():
-                return False
-
-            subpath = subpath[d]
-
-        #~ if subpath in (None, "", {}, []):
-            #~ return False
-
-        if dtype == None:
-            return True
-
-        if dtype == float:
-            return bool(isinstance(subpath, (float, int)))
-
-        if dtype in (str, unicode, 'string'):
-            return bool(isinstance(subpath, (str, unicode)))
-
-        if dtype in (list, tuple, 'list'):
-            return bool(isinstance(subpath, (list, tuple)))
-
-        return bool(isinstance(subpath, dtype))
-
-    def data_value(self, dpath, dtype = None, subpath = None, default = None):
-        if self.is_data_value(dpath, dtype, subpath):
-            if isinstance(dpath, (str, unicode)):
-                dpath = [dpath]
-
-            if subpath == None:
-                subpath = self.data_def
-
-            for d in dpath:
-                subpath = subpath[d]
-
-        else:
-            subpath = None
-
-        if subpath == None:
-            if default != None:
-                return default
-
-            elif dtype in (str, unicode, 'string'):
-                return ""
-
-            elif dtype == dict:
-                return {}
-
-            elif dtype in (list, tuple, 'list'):
-                return []
-
-        return subpath
+        return data_value(searchpath, searchtree, dtype, default)
 
 # end DATAtree
 
