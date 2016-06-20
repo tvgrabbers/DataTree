@@ -87,11 +87,11 @@ def is_data_value(searchpath, searchtree, dtype = None, empty_is_false = False):
 
         searchtree = searchtree[d]
 
+    if dtype == None and not (empty_is_false and searchtree == None):
+        return True
+
     if empty_is_false and searchtree in (None, "", {}, []):
         return False
-
-    if dtype == None:
-        return True
 
     if dtype == float:
         return bool(isinstance(searchtree, (float, int)))
@@ -1300,7 +1300,7 @@ class DATAtree():
         if searchtree == None:
             searchtree = self.data_def
 
-        return is_data_value(searchpath, searchtree, dtype)
+        return is_data_value(searchpath, searchtree, dtype, False)
 
     def data_value(self, searchpath, dtype = None, searchtree = None, default = None):
         if searchtree == None:
