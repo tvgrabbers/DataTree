@@ -808,7 +808,8 @@ class DATAtree():
             if self.is_data_value('time-type', list) \
               and self.is_data_value(['time-type',0], int) \
               and self.data_value(['time-type',0], int) in (12, 24):
-            self.time_type = self.data_value('time-type', list)
+                self.time_type = self.data_value('time-type', list)
+
             self.set_timezone()
             self.value_filters = self.data_value("value-filters", dict)
             self.str_list_splitter = self.data_value("str-list-splitter", str, default = '\|')
@@ -1165,9 +1166,9 @@ class DATAtree():
                             ts = data_value('time-splitter', node_def, str)
 
                         t = re.split(ts, tvalue)
-                        hour = int(datavalue(t, 0, str, '00'))
-                        minute = int(datavalue(t, 1, str, '00'))
-                        second = int(datavalue(t, 2, str, '00'))
+                        hour = int(data_value(0, t, str, '00'))
+                        minute = int(data_value(1, t, str, '00'))
+                        second = int(data_value(2, t, str, '00'))
                         if ttype == 'pm':
                             hour += 12
 
@@ -1318,15 +1319,8 @@ class DATAtree():
                         pass
 
                 elif node_def['type'] == 'list':
-                    if not isinstance(value, list):
-                        value = [value]
-
-                    if data_value("omit-empty-list-items", node_def, bool, False):
-                        while '' in value:
-                            value.remove('')
-
-                        while None in value:
-                            value.remove(None)
+                    # this is handled in find_data_value to prefent double listing
+                    pass
 
                 elif node_def['type'] == '':
                     pass
@@ -1599,16 +1593,21 @@ class DataTreeShell():
             self.fle = sys.stdout
             self.searchtree = None
             self.result = None
-            self.init_data_def(data_def)
+            self.data_def = data_def if isinstance(data_def, dict) else {}
+            self.init_data_def()
             if data != None:
                 self.init_data(data)
 
-    def init_data_def(self, data_def):
+    def init_data_def(self, data_def = None, init_start_node = True):
         with self.tree_lock:
-            self.data_def = data_def if isinstance(data_def, dict) else {}
+            if isinstance(data_def, dict):
+                self.data_def = data_def
+
             self.set_timezone()
             if isinstance(self.searchtree, DATAtree):
                 self.searchtree.check_data_def(self.data_def)
+                if init_start_node:
+                    self.searchtree.find_start_node()
 
     def set_timezone(self, timezone = None):
         with self.tree_lock:
@@ -1836,7 +1835,7 @@ class DataTreeShell():
     def add_on_url_functions(self, urlid, data = None):
         pass
 
-    def init_data(self, data):
+    def init_data(self, data, init_start_node = True):
         with self.tree_lock:
             if isinstance(data, (dict, list)):
                 type = 'json'
@@ -1856,10 +1855,14 @@ class DataTreeShell():
             self.searchtree.show_result = self.show_result
             self.searchtree.print_searchtree = self.print_searchtree
             self.searchtree.check_data_def(self.data_def)
+            if init_start_node:
+                self.searchtree.find_start_node()
 
-    def extract_datalist(self):
+    def extract_datalist(self, init_start_node = False):
         with self.tree_lock:
-            self.searchtree.find_start_node()
+            if init_start_node:
+                self.searchtree.find_start_node()
+
             self.searchtree.extract_datalist()
             if self.is_data_value("values", dict) and isinstance(self.searchtree.result, list):
                 self.result = []
@@ -2112,7 +2115,7 @@ class DataTreeShell():
 
             # Return True (or data[2]) if data[1] is present in data[0], else False (or data[3])
             if fid == 5:
-                if is_data_value(0, data) and is_data_value(1, data) and data[1].lower() in data[0].lower():
+                if is_data_value(0, data, str) and is_data_value(1, data, str) and data[1].lower() in data[0].lower():
                     return data_value(2, data, default = True)
 
                 return data_value(3, data, default = False)
@@ -2209,6 +2212,7 @@ class DataTreeShell():
                 return default
 
         except:
+            #~ traceback.print_exc()
             return default
 
     def add_on_link_functions(self, fid, data = None, source = None, default = None):
