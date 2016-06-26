@@ -28,9 +28,11 @@ For the newest version and documentation see:
     along with this program.  If not, see <http://www.gnu.org/licenses/>.'''
 
 from __future__ import unicode_literals
-import re, sys, traceback
+import re, sys, warnings, traceback
 import time, datetime, pytz
 from threading import RLock
+from Queue import Queue
+
 try:
     from html.parser import HTMLParser, HTMLParseError
 except ImportError:
@@ -45,11 +47,12 @@ dt_name = u'DataTreeGrab'
 dt_major = 1
 dt_minor = 1
 dt_patch = 0
-dt_patchdate = u'20160622'
+dt_patchdate = u'20160626'
 dt_alfa = False
 dt_beta = True
+_warnings = None
 
-__version__  = '%s.%s.%s' % (dt_major,dt_minor,dt_patch)
+__version__  = '%s.%s.%s' % (dt_major,'{:0>2}'.format(dt_minor),'{:0>2}'.format(dt_patch))
 if dt_alfa:
     __version__ = '%s-alfa' % (__version__)
 
@@ -139,6 +142,55 @@ def data_value(searchpath, searchtree, dtype = None, default = None):
 
     return searchtree
 # end data_value()
+
+class dtWarning(UserWarning):
+    # The root of all DataTreeGrab warnings.
+    pass
+
+class dtdata_defWarning(dtWarning):
+    pass
+
+class dtCalcWarning(dtdata_defWarning):
+    pass
+
+class dtUrlWarning(dtWarning):
+    pass
+
+class dtLinkWarning(dtWarning):
+    pass
+
+class _Warnings():
+    def __init__(self, warnaction = "default", warngoal = sys.stderr):
+        self.warn_lock = RLock()
+        self.warngoal = warngoal
+        self.set_warnaction(warnaction)
+        warnings.showwarning = self._show_warning
+
+    def set_warnaction(self, warnaction = "default"):
+        with self.warn_lock:
+            if warnaction in ("error", "ignore", "always", "default", "module", "once"):
+                warnings.simplefilter(warnaction, dtWarning)
+
+            else:
+                warnings.simplefilter("always", dtWarning)
+                warnings.warn('invalid warnaction "%s" issued', dtWarning)
+                warnings.simplefilter("default", dtWarning)
+
+    def _show_warning(self, message, category, filename, lineno, file=None):
+        """Hook to write a warning to a file or a Queue; replace if you like."""
+        with self.warn_lock:
+            message = "\nDataTreeGrab:%s at line:%s: %s\n" % (category.__name__, lineno, message)
+            try:
+                if isinstance(self.warngoal, Queue):
+                    self.warngoal.put(message)
+
+                else:
+                    self.warngoal.write(message)
+
+            except IOError:
+                pass # the file (probably stderr) is invalid - this warning gets lost.
+
+# end _Warnings()
 
 class NULLnode():
     value = None
@@ -775,7 +827,7 @@ class JSONnode(DATAnode):
 # end JSONnode
 
 class DATAtree():
-    def __init__(self, output = sys.stdout):
+    def __init__(self, output = sys.stdout, warnaction = "default", warngoal = sys.stderr):
         self.tree_lock = RLock()
         with self.tree_lock:
             self.print_searchtree = False
@@ -795,6 +847,8 @@ class DATAtree():
             self.utc = pytz.utc
             self.timezone = pytz.utc
             self.value_filters = {}
+            if sys.modules['DataTreeGrab']._warnings == None:
+                sys.modules['DataTreeGrab']._warnings = _Warnings(warnaction, warngoal)
 
     def check_data_def(self, data_def):
         with self.tree_lock:
@@ -816,14 +870,19 @@ class DATAtree():
 
     def set_timezone(self, timezone = None):
         with self.tree_lock:
-            if timezone == None:
-                timezone = self.data_value(["timezone"], str, default='utc')
+            if isinstance(timezone, datetime.tzinfo):
+                self.timezone = timezone
 
-            try:
-                self.timezone = pytz.timezone(timezone)
+            else:
+                if timezone == None:
+                    timezone = self.data_value(["timezone"], str, default='utc')
 
-            except:
-                pytz.utc
+                try:
+                    self.timezone = pytz.timezone(timezone)
+
+                except:
+                    warnings.warn('Invalid timezone "%s" suplied. Falling back to UTC' % (timezone), dtdata_defWarning)
+                    self.timezone = pytz.utc
 
             self.set_current_date()
 
@@ -836,14 +895,23 @@ class DATAtree():
                 else:
                     self.current_date = self.timezone.normalize(cdate.astimezone(self.timezone)).date()
 
+                self.current_ordinal = self.current_date.toordinal()
 
             elif isinstance(cdate, datetime.date):
                 self.current_date = cdate
+                self.current_ordinal = self.current_date.toordinal()
+
+            elif isinstance(cdate, int):
+                self.current_ordinal = cdate
+                datetime.datetime.fromordinal(cdate)
 
             else:
-                self.current_date = self.timezone.normalize(datetime.datetime.now(pytz.utc).astimezone(self.timezone)).date()
+                if cdate != None:
+                    warnings.warn('Invalid or no current_date "%s" suplied. Falling back to NOW' % (cdate), dtdata_defWarning)
 
-            self.current_ordinal = self.current_date.toordinal()
+                self.current_date = self.timezone.normalize(datetime.datetime.now(pytz.utc).astimezone(self.timezone)).date()
+                self.current_ordinal = self.current_date.toordinal()
+
             self.set_current_weekdays()
 
     def set_current_weekdays(self):
@@ -875,11 +943,17 @@ class DATAtree():
                 self.print_text(self.root.print_node())
 
             sn = self.root.get_children(path_def = init_path)
-            self.start_node = self.root if (sn == None or len(sn) == 0) else sn[0]
+            if sn == None or len(sn) == 0 or not isinstance(sn[0], DATAnode):
+                warnings.warn('"init-path": %s did not result in a valid node. Falling back to the rootnode' % (init_path), dtdata_defWarning)
+                self.start_node = self.root
+
+            else:
+                self.start_node = sn[0]
 
     def find_data_value(self, path_def, start_node = None, link_values = None):
         with self.tree_lock:
             if not isinstance(path_def, (list, tuple)) or len(path_def) == 0:
+                warnings.warn('Invalid "path_def": %s supplied to "find_data_value"' % (path_def), dtdata_defWarning)
                 return
 
             if start_node == None or not isinstance(start_node, DATAnode):
@@ -959,6 +1033,7 @@ class DATAtree():
                 def_list = [self.data_value('data',dict)]
 
             else:
+                warnings.warn('No valid "data" keyword found in the "data_def": %s' % (data_def), dtdata_defWarning)
                 return
 
             for dset in def_list:
@@ -1009,6 +1084,9 @@ class DATAtree():
                             self.result.append(tlist)
 
     def calc_value(self, value, node_def = None):
+        def calc_warning(text):
+            warnings.warn('%s calculation Error on value: "%s"\n   Using node_def: %s' % (text, value, node_def), dtCalcWarning, 2)
+
         if isinstance(value, (str, unicode)):
             # Is there something to strip of
             if is_data_value('lower',  node_def):
@@ -1042,13 +1120,6 @@ class DATAtree():
                 for i in range(int(len(node_def['sub'])/2)):
                     value = re.sub(node_def['sub'][i*2], node_def['sub'][i*2+1], value).strip()
 
-            #~ # Is there a search regex
-            #~ if is_data_value('regex', node_def, str):
-                #~ try:
-                    #~ dd = re.search(node_def['regex'],  value, re.DOTALL)
-                        #~ if dd.group(1) not in ('', None):
-                            #~ value = dd.group(1)
-
             # Is there a split list
             if is_data_value('split', node_def, list) and len(node_def['split']) > 0:
                 if not isinstance(node_def['split'][0],list):
@@ -1059,6 +1130,7 @@ class DATAtree():
 
                 for sdef in slist:
                     if len(sdef) < 2 or not isinstance(sdef[0],(str,unicode)):
+                        calc_warning('invalid split')
                         continue
 
                     try:
@@ -1078,7 +1150,7 @@ class DATAtree():
 
                     except:
                         #~ traceback.print_exc()
-                        pass
+                        calc_warning('split')
 
         if is_data_value('multiplier', node_def, int) and not data_value('type', node_def, unicode) in ('timestamp', 'datestamp'):
 
@@ -1087,7 +1159,7 @@ class DATAtree():
 
             except:
                 #~ traceback.print_exc()
-                pass
+                calc_warning('multiplier')
 
         if is_data_value('divider', node_def, int) and node_def['divider'] != 0:
             try:
@@ -1095,12 +1167,12 @@ class DATAtree():
 
             except:
                 #~ traceback.print_exc()
-                pass
+                calc_warning('divider')
 
         # Is there a replace dict
         if is_data_value('replace', node_def, dict):
             if value == None or not isinstance(value, (str, unicode)):
-                pass
+                calc_warning('replace')
 
             elif value.strip().lower() in node_def['replace'].keys():
                 value = node_def['replace'][value.strip().lower()]
@@ -1176,7 +1248,7 @@ class DATAtree():
 
                     except:
                         #~ traceback.print_exc()
-                        pass
+                        calc_warning('time type')
 
                 elif node_def['type'] == 'timedelta':
                     try:
@@ -1184,7 +1256,7 @@ class DATAtree():
 
                     except:
                         #~ traceback.print_exc()
-                        pass
+                        calc_warning('timedelta type')
 
                 elif node_def['type'] == 'date':
                     try:
@@ -1204,6 +1276,9 @@ class DATAtree():
                             if index > len(dseq)-1:
                                 break
 
+                            if not dseq[index].lower() in ('d', 'm', 'y'):
+                                continue
+
                             try:
                                 d[index] = int(d[index])
 
@@ -1212,6 +1287,7 @@ class DATAtree():
                                     d[index] = self.month_names.index(d[index].lower())
 
                                 else:
+                                    calc_warning('invalid "%s" value for date type' % (dseq[index]))
                                     continue
 
                             if dseq[index].lower() == 'd':
@@ -1227,8 +1303,7 @@ class DATAtree():
 
                     except:
                         #~ traceback.print_exc()
-                        pass
-
+                        calc_warning('date type')
 
                 elif node_def['type'] == 'datestamp':
                     val = value
@@ -1249,6 +1324,7 @@ class DATAtree():
                         value = int(value)
 
                     except:
+                        calc_warning('int type')
                         value = 0
 
                 elif node_def['type'] == 'float':
@@ -1256,6 +1332,7 @@ class DATAtree():
                         value = float(value)
 
                     except:
+                        calc_warning('float type')
                         value = 0
 
                 elif node_def['type'] == 'boolean':
@@ -1316,7 +1393,7 @@ class DATAtree():
 
                     except:
                         #~ traceback.print_exc()
-                        pass
+                        calc_warning('str-list type')
 
                 elif node_def['type'] == 'list':
                     # this is handled in find_data_value to prefent double listing
@@ -1327,7 +1404,7 @@ class DATAtree():
 
             except:
                 #~ traceback.print_exc()
-                pass
+                calc_warning('type')
 
         if is_data_value('member-off', node_def, unicode) and data_value('member-off', node_def, unicode) in self.value_filters.keys():
             vf = self.value_filters[data_value('member-off', node_def, unicode)]
@@ -1394,9 +1471,9 @@ class DATAtree():
 # end DATAtree
 
 class HTMLtree(HTMLParser, DATAtree):
-    def __init__(self, data, autoclose_tags=[], print_tags = False, output = sys.stdout):
+    def __init__(self, data, autoclose_tags=[], print_tags = False, output = sys.stdout, warnaction = "default", warngoal = sys.stderr):
         HTMLParser.__init__(self)
-        DATAtree.__init__(self, output)
+        DATAtree.__init__(self, output, warnaction, warngoal)
         with self.tree_lock:
             self.print_tags = print_tags
             self.autoclose_tags = autoclose_tags
@@ -1572,8 +1649,8 @@ class HTMLtree(HTMLParser, DATAtree):
 # end HTMLtree
 
 class JSONtree(DATAtree):
-    def __init__(self, data, output = sys.stdout):
-        DATAtree.__init__(self, output)
+    def __init__(self, data, output = sys.stdout, warnaction = "default", warngoal = sys.stderr):
+        DATAtree.__init__(self, output, warnaction, warngoal)
         with self.tree_lock:
             self.extract_from_parent = True
             self.data = data
@@ -1584,13 +1661,16 @@ class JSONtree(DATAtree):
 # end JSONtree
 
 class DataTreeShell():
-    def __init__(self, data_def, data = None):
+    def __init__(self, data_def, data = None, warnaction = "default", warngoal = sys.stderr):
         self.tree_lock = RLock()
         with self.tree_lock:
             self.print_tags = False
             self.print_searchtree = False
             self.show_result = False
             self.fle = sys.stdout
+            if sys.modules['DataTreeGrab']._warnings == None:
+                sys.modules['DataTreeGrab']._warnings = _Warnings(warnaction, warngoal)
+
             self.searchtree = None
             self.result = None
             self.data_def = data_def if isinstance(data_def, dict) else {}
@@ -1604,6 +1684,7 @@ class DataTreeShell():
                 self.data_def = data_def
 
             self.set_timezone()
+            self.empty_values = self.data_value('empty-values', list, default = [None, ''])
             if isinstance(self.searchtree, DATAtree):
                 self.searchtree.check_data_def(self.data_def)
                 if init_start_node:
@@ -1611,18 +1692,23 @@ class DataTreeShell():
 
     def set_timezone(self, timezone = None):
         with self.tree_lock:
-            if timezone == None:
-                timezone = self.data_value(["timezone"], str, default='utc')
+            if isinstance(timezone, datetime.tzinfo):
+                self.timezone = timezone
 
-            try:
-                self.timezone = pytz.timezone(timezone)
+            else:
+                if timezone == None:
+                    timezone = self.data_value(["timezone"], str, default='utc')
 
-            except:
-                pytz.utc
+                try:
+                    self.timezone = pytz.timezone(timezone)
+
+                except:
+                    warnings.warn('Invalid timezone "%s" suplied. Falling back to UTC' % (timezone), dtdata_defWarning)
+                    self.timezone = pytz.utc
 
             self.set_current_date()
             if isinstance(self.searchtree, DATAtree):
-                self.searchtree.set_timezone(timezone)
+                self.searchtree.set_timezone(self.timezone)
 
     def set_current_date(self, cdate = None):
         with self.tree_lock:
@@ -1644,6 +1730,9 @@ class DataTreeShell():
                 datetime.datetime.fromordinal(cdate)
 
             else:
+                if cdate != None:
+                    warnings.warn('Invalid or no current_date "%s" suplied. Falling back to NOW' % (cdate), dtdata_defWarning)
+
                 self.current_date = self.timezone.normalize(datetime.datetime.now(pytz.utc).astimezone(self.timezone)).date()
                 self.current_ordinal = self.current_date.toordinal()
 
@@ -1686,12 +1775,14 @@ class DataTreeShell():
                 for u_part in self.data_value(["url"], list):
                     uval = get_url_part(u_part)
                     if uval == None:
+                        warnings.warn('Invalid url_part definition: %s' % (u_part), dtUrlWarning, 1)
                         return None
 
                     else:
                         url += unicode(uval)
 
             else:
+                warnings.warn('Missing or invalid "url" keyword.', dtUrlWarning, 1)
                 return None
 
             encoding = self.data_value(["encoding"], str,)
@@ -1700,6 +1791,7 @@ class DataTreeShell():
             for k, v in self.data_value(["url-data"], dict).items():
                 uval = get_url_part(v)
                 if uval == None:
+                    warnings.warn('Invalid url_data definition: %s' % (v), dtUrlWarning, 1)
                     return None
 
                 else:
@@ -1709,8 +1801,15 @@ class DataTreeShell():
             return (url, encoding, accept_header, url_data, is_json)
 
     def url_functions(self, urlid, data = None):
+        def url_warning(text):
+            warnings.warn('%s on function: "%s": %s\n   Using url_data: %s' % (text, urlid, data, self.url_data), dtUrlWarning, 2)
+
         def get_dtstring(dtordinal):
-            return datetime.date.fromordinal(dtordinal).strftime(udf)
+            try:
+                return datetime.date.fromordinal(dtordinal).strftime(udf)
+
+            except:
+                url_warning('Invalid "url-date-format"')
 
         def get_timestamp(dtordinal):
             return int(time.mktime(datetime.date.fromordinal(dtordinal).timetuple())) * udm
@@ -1720,11 +1819,16 @@ class DataTreeShell():
             if len(uwd) == 7:
                 return unicode(uwd[wd])
 
+            url_warning('Invalid "url-weekdays"')
             return unicode(wd)
 
         try:
             if urlid > 99:
-                return self.add_on_url_functions(urlid, data)
+                retval =  self.add_on_url_functions(urlid, data)
+                if retval in (None, ''):
+                    url_warning('No result on custom url function')
+
+                return retval
 
             udt = self.data_value(["url-date-type"], int, default=0)
             udf = self.data_value(["url-date-format"], str, default=None)
@@ -1756,10 +1860,13 @@ class DataTreeShell():
 
                     return cc[1:]
 
+                else:
+                    url_warning('No value found')
+
             elif urlid == 4:
                 # return a range from cnt_offset * cnt +1 to cnt_offset * cnt +cnt
-                cnt = data_value('count', data, int, default=self.data_value(['default-item-count'], int, default=0))
-                cnt_offset = data_value('cnt-offset', data, int, default=0)
+                cnt = data_value('count', self.url_data, int, default=self.data_value(['default-item-count'], int, default=0))
+                cnt_offset = data_value('cnt-offset', self.url_data, int, default=0)
                 cstep = cnt_offset * cnt
                 splitter = self.data_value(["item-range-splitter"], str, default='-')
                 return u'%s%s%s' % (cstep + 1, splitter, cstep  + cnt)
@@ -1788,6 +1895,9 @@ class DataTreeShell():
                 elif udt == 2:
                     # oorboekje.nl, nieuwsblad.be
                     return get_weekday(self.current_ordinal + offset)
+
+                else:
+                    url_warning('Invalid "url-date-type"')
 
             elif urlid == 14:
                 if is_data_value(0, data, str):
@@ -1822,14 +1932,18 @@ class DataTreeShell():
                     start = get_weekday(self.current_ordinal + start)
                     end = get_weekday(self.current_ordinal + end)
 
+                else:
+                    url_warning('Invalid "url-date-type"')
+
                 splitter = self.data_value(["date-range-splitter"], str, default='~')
                 return '%s%s%s' % (start, splitter, end )
 
             else:
+                url_warning('Unknown Url function')
                 return None
 
         except:
-            #~ self.config.log([self.config.text('fetch', 69, ('url', urlid, data['source'])), traceback.format_exc()], 1)
+            warnings.warn('Unknown Url Error on function: "%s": %s\n   Using url_data: %s\n%s' % (urlid, data, self.url_data, traceback.print_exc()), dtUrlWarning, 2)
             return ''
 
     def add_on_url_functions(self, urlid, data = None):
@@ -1838,11 +1952,11 @@ class DataTreeShell():
     def init_data(self, data, init_start_node = True):
         with self.tree_lock:
             if isinstance(data, (dict, list)):
-                type = 'json'
+                dttype = 'json'
                 self.searchtree = JSONtree(data, self.fle)
 
             elif isinstance(data, (str, unicode)) and data.strip()[0] == "<":
-                type = 'html'
+                dttype = 'html'
                 autoclose_tags = self.data_value(["autoclose-tags"], list)
                 if self.data_value(["enclose-with-html-tag"], bool, default=False):
                     data = u'<html>%s</html>' % data
@@ -1870,30 +1984,40 @@ class DataTreeShell():
                     self.result.append(self.link_values(keydata))
 
             else:
+                warnings.warn('No valid "values" keyword found to process')
                 self.result = self.searchtree.result
 
     def link_values(self, linkdata):
         """
         Following the definition in the values definition.
-        Her the data-list for every keyword (channel/program)
+        Her the data-list for every keyword
         retreived with the DataTree module is validated and linked to keywords
         A dict is return
         """
+        def link_warning(text):
+            warnings.warn('%s on function: "%s"\n   Using link_data: %s' % (text, fid, data), dtLinkWarning, 2)
+
         def get_variable(vdef):
             max_length = data_value('max length', vdef, int, 0)
             min_length = data_value('min length', vdef, int, 0)
             varid = data_value("varid", vdef, int)
             if not ((isinstance(linkdata, list) and (0 <= varid < len(linkdata))) \
               or (isinstance(linkdata, dict) and varid in linkdata.keys())):
+                warnings.warn('Requested datavalue "%s" does not exist in: %s'% (varid, linkdata))
                 return
 
+            # remove any leading or trailing spaces on a string/unicode value
             value = linkdata[varid] if (not  isinstance(linkdata[varid], (unicode, str))) else unicode(linkdata[varid]).strip()
+            # check on length restrictions
             if min_length > 0 and len(value) < min_length:
+                warnings.warn('Requested datavalue "%s" is shorter then'% (varid, min_length))
                 return
 
             if max_length > 0 and len(value) > max_length:
+                warnings.warn('Requested datavalue "%s" is longer then'% (varid, max_length))
                 return
 
+            # apply any regex, type or calc statements
             if is_data_value('regex', vdef, str):
                 value = get_regex(vdef, value)
 
@@ -1908,38 +2032,44 @@ class DataTreeShell():
         def process_link_function(vdef):
             funcid = data_value("funcid", vdef, int)
             default = data_value("default", vdef)
-            if funcid != None:
-                funcdata = data_value("data", vdef, list)
-                data = []
-                for fd in funcdata:
-                    if is_data_value("varid", fd, int):
-                        dvar = get_variable(fd)
-                        if dvar == None:
-                            data.append('')
+            if funcid == None:
+                warnings.warn('Invalid linkfunction ID "%s" in: %s'% (funcid, vdef))
+                return
 
-                        else:
-                            data.append(dvar)
-
-                    elif is_data_value("funcid", fd, int):
-                        data.append(process_link_function(fd))
+            # Process the datavalues given for the function
+            funcdata = data_value("data", vdef, list)
+            data = []
+            for fd in funcdata:
+                if is_data_value("varid", fd, int):
+                    dvar = get_variable(fd)
+                    if dvar == None:
+                        data.append('')
 
                     else:
-                        data.append(fd)
+                        data.append(dvar)
 
-                value = self.link_functions(funcid, data, default)
-                if value in (None, '', '-'):
-                    return
+                elif is_data_value("funcid", fd, int):
+                    data.append(process_link_function(fd))
 
-                if is_data_value('regex', vdef, str):
-                    value = get_regex(vdef, value)
+                else:
+                    data.append(fd)
 
-                if is_data_value('type', vdef, str):
-                    value = check_type(vdef, value)
+            # And call the linkfunction
+            value = self.link_functions(funcid, data, default)
+            if value in self.empty_values:
+                return
 
-                if is_data_value('calc', vdef, dict):
-                    value = calc_value(vdef['calc'], value)
+            # apply any regex, type or calc statements
+            if is_data_value('regex', vdef, str):
+                value = get_regex(vdef, value)
 
-                return value
+            if is_data_value('type', vdef, str):
+                value = check_type(vdef, value)
+
+            if is_data_value('calc', vdef, dict):
+                value = calc_value(vdef['calc'], value)
+
+            return value
 
         def get_regex(vdef, value):
             search_regex = data_value('regex', vdef, str, None)
@@ -1949,9 +2079,11 @@ class DataTreeShell():
                     return dd.group(1)
 
                 else:
+                    warnings.warn('Regex "%s" in: %s returned no value on "%s"'% (search_regex, vdef, value))
                     return
 
             except:
+                warnings.warn('Invalid regex "%s" in: %s'% (search_regex, vdef))
                 return
 
         def check_type(vdef, value):
@@ -1979,9 +2111,11 @@ class DataTreeShell():
                     return bool(value)
 
                 else:
+                    warnings.warn('Invalid type "%s" requested'% (dtype))
                     return value
 
             except:
+                warnings.warn('Error on applying type "%s" on "%s"'% (dtype, value))
                 return None
 
         def calc_value(vdef, value):
@@ -1992,8 +2126,8 @@ class DataTreeShell():
                     value = value * vdef['multiplier']
 
                 except:
+                    warnings.warn('Error on applying multiplier "%s" on "%s"'% (vdef['multiplier'], value))
                     #~ traceback.print_exc()
-                    pass
 
             if is_data_value('devider', vdef, float):
                 try:
@@ -2002,43 +2136,58 @@ class DataTreeShell():
                     value = value / vdef['devider']
 
                 except:
+                    warnings.warn('Error on applying devider "%s" on "%s"'% (vdef['devider'], value))
                     #~ traceback.print_exc()
-                    pass
 
             return value
 
         values = {}
-        if isinstance(linkdata, (list, tuple, dict)):
+        if isinstance(linkdata, (list, dict)):
             for k, v in self.data_value(["values"], dict).items():
+                # first check if it contains a varid statement
                 if is_data_value("varid", v, int):
                     vv = get_variable(v)
-                    if vv not in (None, '', '-'):
+                    if vv not in self.empty_values:
                         values[k] = vv
                         continue
 
+                # else look for a funcid statement
                 elif is_data_value("funcid", v, int):
                     cval = process_link_function(v)
-                    if cval not in (None, '', '-'):
+                    if cval not in self.empty_values:
                         values[k] = cval
                         continue
 
+                # and last for value statement
                 elif is_data_value("value", v):
                     values[k] = data_value("value", v)
                     continue
 
+                # If no resulting value was retrieved go for a default
                 if is_data_value('default', v):
                     values[k] = v['default']
+
+        else:
+            link_warning('No valid data returned to link with')
 
         return values
 
     def link_functions(self, fid, data = None, default = None):
+        def link_warning(text):
+            warnings.warn('%s on function: "%s"\n   Using link_data: %s' % (text, fid, data), dtLinkWarning, 2)
+
         try:
             if fid > 99:
-                return self.add_on_link_functions(fid, data, default)
+                retval = self.add_on_link_functions(fid, data, default)
+                if retval in (None, ''):
+                    link_warning('No result on custom link function')
+
+                return retval
 
             # strip data[1] from the end of data[0] if present and make sure it's unicode
-            if fid == 0:
+            elif fid == 0:
                 if not is_data_value(0, data, str):
+                    link_warning('Missing or invalid data value 0')
                     if default != None:
                         return default
 
@@ -2051,7 +2200,7 @@ class DataTreeShell():
                     return unicode(data[0]).strip()
 
             # concatenate stringparts and make sure it's unicode
-            if fid == 2:
+            elif fid == 2:
                 dd = u''
                 for d in data:
                     if d != None:
@@ -2059,12 +2208,13 @@ class DataTreeShell():
                             dd += unicode(d)
 
                         except:
+                            link_warning('Invalid data value')
                             continue
 
                 return dd
 
             # get 1 or more parts of a path
-            if fid == 3:
+            elif fid == 3:
                 if is_data_value(0, data, str):
                     dd = data[0].split('/')
 
@@ -2072,17 +2222,26 @@ class DataTreeShell():
                         if data[1] < len(dd):
                             return dd[data[1]]
 
+                        else:
+                            link_warning('Missing or invalid data value 1')
+
                     elif is_data_value(1, data, list):
                         rval = u''
                         for dpart in data[1]:
                             if isinstance(dpart, int) and dpart < len(dd):
                                 rval = u'%s/%s' % (rval, dpart)
 
+                            else:
+                                link_warning('Missing or invalid data value in list 1')
+
                         if len(rval) == 0:
                             return rval
 
                         else:
                             return rval[1:]
+
+                else:
+                    link_warning('Missing or invalid data value 0')
 
                 if default == None:
                     return u''
@@ -2091,13 +2250,14 @@ class DataTreeShell():
                     return default
 
             # Combine a date and time value
-            if fid == 4:
+            elif fid == 4:
                 if not is_data_value(0, data, datetime.date):
                     data[0] = self.current_date
 
                 if not(is_data_value(0, data, datetime.date) \
-                    and is_data_value(1, data, datetime.time) \
-                    and is_data_value(2, data, int)):
+                  and is_data_value(1, data, datetime.time) \
+                  and is_data_value(2, data, int)):
+                    link_warning('Missing or invalid date and/or time values')
                     return default
 
                 dt = self.timezone.localize(datetime.datetime.combine(data[0], data[1]))
@@ -2114,14 +2274,14 @@ class DataTreeShell():
                 return dt
 
             # Return True (or data[2]) if data[1] is present in data[0], else False (or data[3])
-            if fid == 5:
+            elif fid == 5:
                 if is_data_value(0, data, str) and is_data_value(1, data, str) and data[1].lower() in data[0].lower():
                     return data_value(2, data, default = True)
 
                 return data_value(3, data, default = False)
 
             # Compare the values 1 and 2 returning 3 (or True) if equal, 4 (or False) if unequal and 5 (or None) if one of them is None
-            if fid == 6:
+            elif fid == 6:
                 if not is_data_value(0, data, None, True) or not is_data_value(1, data, None, True):
                     return data_value(4, data, default = None)
 
@@ -2131,7 +2291,7 @@ class DataTreeShell():
                 return data_value(3, data, default = False)
 
             # Return a string on value True
-            if fid == 7:
+            elif fid == 7:
                 if is_data_value(0, data, bool):
                     if data[0] and is_data_value(1, data):
                         return data[1]
@@ -2139,11 +2299,19 @@ class DataTreeShell():
                     elif is_data_value(2, data):
                         return data[2]
 
+                    else:
+                        link_warning('Missing return values 1 and or 2')
+
+                link_warning('No boolean value 0')
                 return default
 
             # Return the longest not empty text value
-            if fid == 8:
+            elif fid == 8:
                 text = default if isinstance(default, (str, unicode)) else u''
+                if len(data) == 0:
+                    link_warning('Missing data values')
+                    return text
+
                 for item in range(len(data)):
                     if is_data_value(item, data, str):
                         if len(data[item]) > len(text):
@@ -2152,8 +2320,9 @@ class DataTreeShell():
                 return text
 
             # Return the first not empty value
-            if fid == 9:
+            elif fid == 9:
                 if len(data) == 0:
+                    link_warning('Missing data values')
                     return default
 
                 for item in data:
@@ -2162,8 +2331,9 @@ class DataTreeShell():
                         return item
 
             # look for item 2 in list 0 and return the coresponding value in list1, If not found return item 3 (or None)
-            if fid == 10:
+            elif fid == 10:
                 if len(data) < 3 :
+                    link_warning('Missing data values (min. 3)')
                     return default
 
                 if not isinstance(data[0], (list,tuple)):
@@ -2183,11 +2353,13 @@ class DataTreeShell():
                 if len(data) > 3 :
                     return data[3]
 
+                link_warning('Item 2 not found in list 0 or list 1 to short')
                 return default
 
             # look for item 1 in the keys from dict 0 and return the coresponding value
-            if fid == 11:
+            elif fid == 11:
                 if len(data) < 2:
+                    link_warning('Missing data values (min. 2)')
                     return default
 
                 if is_data_value(0, data, dict):
@@ -2209,10 +2381,15 @@ class DataTreeShell():
 
                                     return sitem[item.lower()]
 
+                link_warning('Item 1 not found in dict 0')
                 return default
 
+            else:
+                url_warning('Unknown link function')
+                return None
+
         except:
-            #~ traceback.print_exc()
+            warnings.warn('Unknown link Error on function: "%s"\n   Using link_data: %s\n%s' % (fid, data, traceback.print_exc()), dtLinkWarning, 2)
             return default
 
     def add_on_link_functions(self, fid, data = None, source = None, default = None):
