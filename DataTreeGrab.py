@@ -1998,7 +1998,7 @@ class DataTreeShell():
                     self.result.append(self.link_values(keydata))
 
             else:
-                warnings.warn('No valid "values" keyword found to process')
+                warnings.warn('No valid "values" keyword found or no data retrieved to process')
                 self.result = self.searchtree.result
 
     def link_values(self, linkdata):

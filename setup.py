@@ -6,7 +6,14 @@ pages.
 It reads the page into a Node based tree, from which you, on the bases of a json
 data-file, can extract your data into a list of items. It can first extract a
 list of keyNodes and extract for each of them the same data-list. During the
-extraction several data manipulation functions are available.'''
+extraction several data manipulation functions are available.
+
+Main advantages
+ - It gives you a highly dependable dataset from a potentially changable source.
+ - You can easily update on changes in the source without touching your code.
+ - You can make the data_def available on a central location while distributing
+   the aplication and so giving your users easy access to (automated) updates.
+'''
 
 from distutils.core import setup
 from DataTreeGrab import version, __version__
@@ -23,4 +30,13 @@ setup(
     maintainer_email = 'hikavdh at gmail dot com',
     license='GPL',
     url='https://github.com/tvgrabbers/DataTree',
-)
+    classifiers=[
+        'Development Status :: 4 - Beta',
+        'Operating System :: Microsoft :: Windows',
+        'Operating System :: POSIX',
+        'Programming Language :: Python :: 2.7',
+        'Intended Audience :: Developers',
+        'Intended Audience :: End Users/Desktop',
+        'License :: Public Domain',
+        'Topic :: Internet :: WWW/HTTP :: Indexing/Search']
+        )
