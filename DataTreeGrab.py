@@ -8,6 +8,13 @@ It reads the page into a Node based tree, from which you, on the bases of a json
 data-file, can extract your data into a list of items. It can first extract a
 list of keyNodes and extract for each of them the same data-list. During the
 extraction several data manipulation functions are available.
+
+Main advantages
+ - It gives you a highly dependable dataset from a potentially changable source.
+ - You can easily update on changes in the source without touching your code.
+ - You can make the data_def available on a central location while distributing
+   the aplication and so giving your users easy access to (automated) updates.
+
 For the newest version and documentation see:
 
     https://github.com/tvgrabbers/DataTree/
@@ -472,13 +479,14 @@ class HTMLnode(DATAnode):
             return False
 
         self.link_value = {}
-        if not isinstance(attributes,list):
-            attributes = []
-
         if not isinstance(link_values, dict):
             link_values ={}
 
         if node_def == None:
+            # It's not a selection through a node_def
+            if not isinstance(attributes,list):
+                attributes = []
+
             if tag.lower() in (None, self.tag.lower()):
                 if attributes == None:
                     return True
@@ -545,27 +553,32 @@ class HTMLnode(DATAnode):
             if node_def['tail'].lower() != self.tail.lower():
                 return False
 
-        if not is_data_value('attrs', node_def, dict):
-            # And there are no attrib matches requested
-            if not last_node_def:
-                self.check_for_linkrequest(node_def)
+        if is_data_value('attrs', node_def, dict):
+            for a, v in node_def['attrs'].items():
+                if is_data_value('not', v, list):
+                    # There is a negative attrib match requested
+                    for val in v['not']:
+                        if self.is_attribute(a) and self.attributes[a] == val:
+                            return False
 
-            return True
-
-        for a, v in node_def['attrs'].items():
-            if is_data_value('not', v, list):
-                # There is a negative attrib match requested
-                for val in v['not']:
-                    if self.is_attribute(a) and self.attributes[a] == val:
+                elif is_data_value('link', v, int) and v["link"] in link_values.keys():
+                    # The requested value is in link_values
+                    if not self.is_attribute(a, link_values[v["link"]]):
                         return False
 
-            elif is_data_value('link', v, int) and v["link"] in link_values.keys():
-                # The requested value is in link_values
-                if not self.is_attribute(a, link_values[v["link"]]):
+                elif not self.is_attribute(a, v):
                     return False
 
-            elif not self.is_attribute(a, v):
-                return False
+        if is_data_value('notattrs', node_def, dict):
+            for a, v in node_def['notattrs'].items():
+
+                if is_data_value('link', v, int) and v["link"] in link_values.keys():
+                    # The requested value is in link_values
+                    if self.is_attribute(a, link_values[v["link"]]):
+                        return False
+
+                elif self.is_attribute(a, v):
+                    return False
 
         if not last_node_def:
             self.check_for_linkrequest(node_def)
@@ -712,9 +725,10 @@ class JSONnode(DATAnode):
 
             return False
 
-        elif is_data_value('keys', node_def, dict):
+        elif is_data_value('keys', node_def, dict) or is_data_value('childkeys', node_def, dict):
+            ck = node_def['childkeys'] if is_data_value('childkeys', node_def, dict) else node_def['keys']
             # Does it contain the requested key/value pairs
-            for item, v in node_def["keys"].items():
+            for item, v in ck.items():
                 if not item in self.keys:
                     return False
 
