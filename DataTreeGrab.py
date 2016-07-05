@@ -147,6 +147,9 @@ class dtWarning(UserWarning):
     # The root of all DataTreeGrab warnings.
     pass
 
+class dtDataWarning(dtWarning):
+    pass
+
 class dtdata_defWarning(dtWarning):
     pass
 
@@ -935,6 +938,10 @@ class DATAtree():
             if isinstance(data_def, dict):
                 self.data_def = data_def
 
+            if not isinstance(self.start_node, DATAnode):
+                warnings.warn('Unable to set a start_node. Invalid dataset!', dtDataWarning)
+                return
+
             if self.print_searchtree:
                 self.print_text('The root Tree:\n')
                 self.start_node.print_tree()
@@ -959,6 +966,10 @@ class DATAtree():
 
             if start_node == None or not isinstance(start_node, DATAnode):
                 start_node = self.start_node
+
+            if not isinstance(start_node, DATAnode):
+                warnings.warn('Unable to search the tree. Invalid dataset!', dtDataWarning)
+                return
 
             nlist = start_node.get_children(path_def = path_def, link_values = link_values)
             if data_value('select', path_def[-1], str) == 'presence':
@@ -1019,6 +1030,10 @@ class DATAtree():
         with self.tree_lock:
             if isinstance(data_def, dict):
                 self.data_def = data_def
+
+            if not isinstance(self.start_node, DATAnode):
+                warnings.warn('Unable to search the tree. Invalid dataset!', dtDataWarning)
+                return
 
             if self.print_searchtree:
                 self.print_text('The %s Tree:\n' % self.start_node.print_node())
@@ -1486,10 +1501,14 @@ class HTMLtree(HTMLParser, DATAtree):
             self.open_tags = {}
             self.count_tags(data)
             # read the html page into the tree
-            self.feed(data)
-            self.reset()
-            # And find the dataset into self.result
-            self.start_node = self.root
+            try:
+                self.feed(data)
+                self.reset()
+                self.start_node = self.root
+
+            except:
+                warnings.warn('Unable to parse the HTML data. Invalid dataset!', dtDataWarning)
+                self.start_node = NULLnode()
 
     def count_tags(self, data):
         tag_list = re.compile("\<(.*?)\>", re.DOTALL)
@@ -1656,8 +1675,13 @@ class JSONtree(DATAtree):
             self.extract_from_parent = True
             self.data = data
             # Read the json data into the tree
-            self.root = JSONnode(self, data, key = 'ROOT')
-            self.start_node = self.root
+            try:
+                self.root = JSONnode(self, data, key = 'ROOT')
+                self.start_node = self.root
+
+            except:
+                warnings.warn('Unable to parse the JSON data. Invalid dataset!', dtDataWarning)
+                self.start_node = NULLnode()
 
 # end JSONtree
 
@@ -1673,7 +1697,7 @@ class DataTreeShell():
                 sys.modules['DataTreeGrab']._warnings = _Warnings(warnaction, warngoal)
 
             self.searchtree = None
-            self.result = None
+            self.result = []
             self.data_def = data_def if isinstance(data_def, dict) else {}
             self.init_data_def()
             if data != None:
@@ -1978,6 +2002,7 @@ class DataTreeShell():
                 self.searchtree = HTMLtree(data, autoclose_tags, self.print_tags, self.fle)
 
             else:
+                warnings.warn('Failed to initialise the searchtree. Run with a valid dataset', dtDataWarning)
                 return
 
             self.searchtree.show_result = self.show_result
@@ -1988,12 +2013,16 @@ class DataTreeShell():
 
     def extract_datalist(self, init_start_node = False):
         with self.tree_lock:
+            if not isinstance(self.searchtree, DATAtree):
+                warnings.warn('The searchtree has not jet been initialized. Run .init_data() first with a valid dataset')
+                return
+
             if init_start_node:
                 self.searchtree.find_start_node()
 
+            self.result = []
             self.searchtree.extract_datalist()
             if self.is_data_value("values", dict) and isinstance(self.searchtree.result, list):
-                self.result = []
                 for keydata in self.searchtree.result:
                     self.result.append(self.link_values(keydata))
 
