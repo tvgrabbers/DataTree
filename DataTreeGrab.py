@@ -53,8 +53,8 @@ except ImportError:
 dt_name = u'DataTreeGrab'
 dt_major = 1
 dt_minor = 1
-dt_patch = 2
-dt_patchdate = u'20160705'
+dt_patch = 3
+dt_patchdate = u'20160709'
 dt_alfa = False
 dt_beta = True
 _warnings = None
@@ -76,6 +76,7 @@ def is_data_value(searchpath, searchtree, dtype = None, empty_is_false = False):
     and report if there exists a value of type dtype
     searchpath is a list of keys/indices
     If dtype is None check for any value
+    you can also supply a tuple  to dtype
     """
     if isinstance(searchpath, (str, unicode, int)):
         searchpath = [searchpath]
@@ -103,14 +104,28 @@ def is_data_value(searchpath, searchtree, dtype = None, empty_is_false = False):
     if empty_is_false and searchtree in (None, "", {}, []):
         return False
 
-    if dtype == float:
-        return bool(isinstance(searchtree, (float, int)))
+    if isinstance(dtype, tuple):
+        dtype = list(dtype)
 
-    if dtype in (str, unicode, 'string'):
-        return bool(isinstance(searchtree, (str, unicode)))
+    elif not isinstance(dtype, list):
+        dtype = [dtype]
 
-    if dtype in (list, tuple, 'list'):
-        return bool(isinstance(searchtree, (list, tuple)))
+    if float in dtype and not int in dtype:
+        dtype.append(int)
+
+    if str in dtype or unicode in dtype or 'string' in dtype:
+        for dt in (str, unicode, 'string'):
+            while dt in dtype:
+                dtype.remove(dt)
+        dtype.extend([str, unicode])
+
+    if list in dtype or tuple in dtype or 'list' in dtype:
+        for dt in (list, tuple, 'list'):
+            while dt in dtype:
+                dtype.remove(dt)
+        dtype.extend([list, tuple])
+
+    dtype = tuple(dtype)
 
     return bool(isinstance(searchtree, dtype))
 # end is_data_value()
@@ -277,7 +292,8 @@ class DATAnode():
             if sel_val == 'parent' and not self.is_root:
                 if self.dtree.show_result:
                     self.dtree.print_text(u'  found node %s; %s\n'.encode('utf-8', 'replace') % (self.parent.print_node(), d_def[0]))
-                self.parent.match_node(node_def = d_def[0], link_values=link_values)
+                #~ self.parent.match_node(node_def = d_def[0], link_values=link_values)
+                self.parent.check_for_linkrequest(d_def[0])
                 if len(self.parent.link_value) > 0:
                     for k, v in self.parent.link_value.items():
                         link_values[k] = v
@@ -293,7 +309,8 @@ class DATAnode():
             elif sel_val == 'root':
                 if self.dtree.show_result:
                     self.dtree.print_text(u'  found node %s; %s\n'.encode('utf-8', 'replace') % (self.root.print_node(), d_def[0]))
-                self.root.match_node(node_def = d_def[0], link_values=link_values)
+                #~ self.root.match_node(node_def = d_def[0], link_values=link_values)
+                self.root.check_for_linkrequest(d_def[0])
                 if len(self.root.link_value) > 0:
                     for k, v in self.root.link_value.items():
                         link_values[k] = v
@@ -310,7 +327,8 @@ class DATAnode():
                 for item in self.children:
                     if self.dtree.show_result:
                         self.dtree.print_text(u'  found node %s; %s\n'.encode('utf-8', 'replace') % (item.print_node(), d_def[0]))
-                    item.match_node(node_def = d_def[0], link_values=link_values)
+                    #~ item.match_node(node_def = d_def[0], link_values=link_values)
+                    item.check_for_linkrequest(d_def[0])
                     if len(item.link_value) > 0:
                         for k, v in item.link_value.items():
                             link_values[k] = v
@@ -370,6 +388,140 @@ class DATAnode():
             self.link_value[node_def['link']] = self.find_value(node_def)
             if self.dtree.show_result:
                 self.dtree.print_text(u'    saving link to node %s: %s\n      %s\n'.encode('utf-8', 'replace') % (self.find_value(node_def), self.print_node(), node_def))
+
+    def get_link(self, sub_def, link_values, ltype = None):
+        if not is_data_value(data_value(['link'], sub_def, int), link_values):
+            warnings.warn('You requested a link, but link value %s is not stored!\n' % data_value(['link'], node_def, int), dtdata_defWarning)
+            return None
+
+        il = link_values[data_value(['link'], sub_def, int)]
+        if ltype == 'int':
+            try:
+                il = int(il)
+
+            except:
+                warnings.warn('Invalid linkvalue "%s" requested. Should be integer.' % (il), dtdata_defWarning)
+                return None
+
+        if ltype == 'lower':
+            try:
+                return unicode(il).lower()
+
+            except:
+                warnings.warn('Invalid linkvalue "%s" requested. Should be integer.' % (il), dtdata_defWarning)
+                return None
+
+        if ltype == 'str':
+            try:
+                return unicode(il)
+
+            except:
+                warnings.warn('Invalid linkvalue "%s" requested. Should be integer.' % (il), dtdata_defWarning)
+                return None
+
+        if isinstance(il, (int, float)):
+            clist = data_value(['calc'], sub_def, list)
+            if len(clist) == 2 and isinstance(clist[1], (int, float)):
+                if clist[0] == 'min':
+                    il -= clist[1]
+
+                elif clist[0] == 'plus':
+                    il += clist[1]
+
+        return il
+
+    def check_index(self, node_def, link_values):
+        if is_data_value(['index','link'], node_def, int):
+            # There is an index request to an earlier linked index
+            il = self.get_link(data_value(['index'], node_def, dict), link_values, 'int')
+            if not isinstance(il, int):
+                warnings.warn('You requested an index link, but the stored value is no integer!\n', dtdata_defWarning)
+                return None
+
+            if is_data_value(['index','previous'], node_def):
+                if self.child_index < il:
+                    return True
+
+            if is_data_value(['index','next'], node_def):
+                if self.child_index > il:
+                    return True
+
+            if self.child_index == il:
+                return True
+
+        elif is_data_value(['index'], node_def, int):
+            # There is an index request to a set value
+            if self.child_index == data_value(['index'], node_def, int):
+                return True
+
+        else:
+            return None
+
+        return False
+
+    def get_value_list(self, vlist, link_values, valuetype = '', ltype = None):
+        if not isinstance(vlist, (list, tuple)):
+            vlist = [vlist]
+
+        rlist = []
+        for index in range(len(vlist)):
+            if is_data_value([index,'link'], vlist, int):
+                rlist.append(self.get_link(data_value([index], vlist, dict), link_values, ltype))
+
+            elif ltype == 'lower':
+                try:
+                    rlist.append(unicode(vlist[index]).lower())
+
+                except:
+                    warnings.warn('Invalid %s matchvalue "%s" requested. Should be string.' % (valuetype, vlist[index]), dtdata_defWarning)
+
+            elif ltype == 'str':
+                try:
+                    rlist.append(unicode(vlist[index]))
+
+                except:
+                    warnings.warn('Invalid %s matchvalue "%s" requested. Should be string.' % (valuetype, vlist[index]), dtdata_defWarning)
+
+            elif ltype == 'int':
+                try:
+                    rlist.append(int(vlist[index]).lower())
+
+                except:
+                    warnings.warn('Invalid %s matchvalue "%s" requested. Should be integer.' % (valuetype, vlist[index]), dtdata_defWarning)
+
+            else:
+                rlist.append(vlist[index])
+
+        return rlist
+
+    def get_value(self, value, link_values, valuetype = '', ltype = None):
+        if is_data_value(['link'], value, int):
+            return self.get_link(value ,link_values, ltype)
+
+        elif ltype == 'lower':
+            try:
+                return unicode(value).lower()
+
+            except:
+                warnings.warn('Invalid %s matchvalue "%s" requested. Should be string.' % (valuetype, value), dtdata_defWarning)
+
+        elif ltype == 'str':
+            try:
+                return unicode(value)
+
+            except:
+                warnings.warn('Invalid %s matchvalue "%s" requested. Should be string.' % (valuetype, value), dtdata_defWarning)
+
+        elif ltype == 'int':
+            try:
+                return int(value).lower()
+
+            except:
+                warnings.warn('Invalid %s matchvalue "%s" requested. Should be integer.' % (valuetype, value), dtdata_defWarning)
+
+        else:
+            return value
+
 
     def match_node(self, node_def = None, link_values = None, last_node_def = False):
         self.link_value = {}
@@ -447,37 +599,6 @@ class HTMLnode(DATAnode):
         return childs
 
     def match_node(self, tag = None, attributes = None, node_def = None, link_values=None, last_node_def = False):
-        def check_index_link():
-            if not data_value(['index','link'], node_def, int) in link_values.keys():
-                sys.stderr.write('You requested an index link, but link value %s is not stored!\n' % data_value(['index','link'], node_def, int))
-                return False
-
-            il = link_values[data_value(['index','link'], node_def, int)]
-            if not isinstance(il, int):
-                sys.stderr.write('You requested an index link, but the stored value is no integer!\n')
-                return False
-
-            clist = data_value(['index','calc'], node_def, list)
-            if len(clist) == 2 and isinstance(clist[1], int):
-                if clist[0] == 'min':
-                    il -= clist[1]
-
-                elif clist[0] == 'plus':
-                    il += clist[1]
-
-            if is_data_value(['index','previous'], node_def):
-                if self.child_index < il:
-                    return True
-
-            if is_data_value(['index','next'], node_def):
-                if self.child_index > il:
-                    return True
-
-            if self.child_index == il:
-                return True
-
-            return False
-
         self.link_value = {}
         if not isinstance(link_values, dict):
             link_values ={}
@@ -504,33 +625,27 @@ class HTMLnode(DATAnode):
                 return False
 
         elif is_data_value('tag', node_def):
-            if node_def['tag'].lower() in (None, self.tag.lower()):
+            if self.get_value(node_def["tag"], link_values, 'tag', 'lower') in (None, self.tag.lower()):
                 # The tag matches
-                if is_data_value(['index','link'], node_def, int):
-                    # There is an index request to an earlier linked index
-                    if not check_index_link():
-                        return False
-
-                elif is_data_value(['index'], node_def, int):
-                    # There is an index request to a set value
-                    if self.child_index != data_value(['index'], node_def, int):
-                        return False
+                if not self.check_index(node_def, link_values) in (True, None):
+                    return False
 
             else:
+                # The tag doesn't matches
+                return False
+
+        elif is_data_value('tags', node_def, list):
+            if self.tag.lower() in self.get_value_list(data_value('tags', node_def, list), link_values, 'tag', 'lower'):
+                # The tag matches
+                if not self.check_index(node_def, link_values) in (True, None):
+                    return False
+
+            else:
+                # The tag doesn't matches
                 return False
 
         elif is_data_value('index', node_def):
-            if is_data_value(['index','link'], node_def, int):
-                # There is an index request to an earlier linked index
-                if not check_index_link():
-                    return False
-
-            elif is_data_value(['index'], node_def, int):
-                # There is an index request to a set value
-                if self.child_index != data_value(['index'], node_def, int):
-                    return False
-
-            else:
+            if self.check_index(node_def, link_values) in (False, None):
                 return False
 
         elif is_data_value('path', node_def):
@@ -545,40 +660,77 @@ class HTMLnode(DATAnode):
 
             return None
 
-        if is_data_value('text', node_def, str):
-            if node_def['text'].lower() != self.text.lower():
+        for kw in ('text', 'tail'):
+            if (is_data_value([kw,'link'], node_def, int) or is_data_value(kw, node_def, str)) \
+              and self.get_value(node_def[kw], link_values, kw, 'lower') != self.text.lower():
                 return False
 
-        if is_data_value('tail', node_def, str):
-            if node_def['tail'].lower() != self.tail.lower():
-                return False
+        if is_data_value('attrs', node_def, (dict, list)):
+        #~ if is_data_value('attrs', node_def):
+            ck = data_value('attrs', node_def)
+            if not is_data_value('attrs', node_def, list):
+                ck = [ck]
 
-        if is_data_value('attrs', node_def, dict):
-            for a, v in node_def['attrs'].items():
-                if is_data_value('not', v, list):
-                    # There is a negative attrib match requested
-                    for val in v['not']:
-                        if self.is_attribute(a) and self.attributes[a] == val:
+            for cd in ck:
+                if not isinstance(cd, dict):
+                    continue
+
+                for a, v in cd.items():
+                    notv = False
+                    if is_data_value('not', v, list):
+                        # There is a negative attrib match requested
+                        notv = True
+                        if not self.is_attribute(a):
+                            # but the attribute is not there
+                            continue
+
+                        alist = self.get_value_list(data_value('not', v, list), link_values, 'attribute', 'str')
+
+                    else:
+                        if not self.is_attribute(a):
+                            # but the attribute is not there
                             return False
 
-                elif is_data_value('link', v, int) and v["link"] in link_values.keys():
-                    # The requested value is in link_values
-                    if not self.is_attribute(a, link_values[v["link"]]):
-                        return False
+                        alist = self.get_value_list(v, link_values, 'attribute', 'str')
 
-                elif not self.is_attribute(a, v):
-                    return False
+                    if notv:
+                        if len(alist) == 0:
+                            # No values to exclude
+                            continue
 
-        if is_data_value('notattrs', node_def, dict):
-            for a, v in node_def['notattrs'].items():
+                        elif (len(alist) == 1 and alist[0] == None) or self.attributes[a] in alist:
+                            # the current value is in the list so we exclude
+                            return False
 
-                if is_data_value('link', v, int) and v["link"] in link_values.keys():
-                    # The requested value is in link_values
-                    if self.is_attribute(a, link_values[v["link"]]):
-                        return False
+                    else:
+                        if v == None or (len(alist) == 1 and alist[0] == None):
+                            # All values are OK so continue
+                            continue
 
-                elif self.is_attribute(a, v):
-                    return False
+                        elif len(alist) == 0 or not self.attributes[a] in alist:
+                            # No values  specified or not present so exclude
+                            return False
+
+        if is_data_value('notattrs', node_def, (dict, list)):
+        #~ if is_data_value('notattrs', node_def):
+            ck = data_value('notattrs', node_def)
+            if not is_data_value('notattrs', node_def, list):
+                ck = [ck]
+
+            for cd in ck:
+                if not isinstance(cd, dict):
+                    continue
+
+                for a, v in cd.items():
+                    if self.is_attribute(a):
+                        alist = self.get_value_list(v, link_values, 'notattrs', 'str')
+                        if v == None or (len(alist) == 1 and alist[0] == None):
+                            # All values are OK so exclude
+                            return False
+
+                        elif len(alist) > 0 and self.attributes[a] in alist:
+                            # The attribute is in the ban list so exclude
+                            return False
 
         if not last_node_def:
             self.check_for_linkrequest(node_def)
@@ -605,6 +757,39 @@ class HTMLnode(DATAnode):
             return self.dtree.calc_value(sv, node_def['name'])
 
     def find_value(self, node_def = None):
+        def add_child_text(child, depth, in_text = None, ex_text = None):
+            t = u''
+            if in_text != None:
+                if child.tag in in_text:
+                    if child.text != '':
+                        t = u'%s %s' % (t, child.text)
+
+                    if depth > 1:
+                        for c in child.children:
+                            t = u'%s %s' % (t, add_child_text(c, depth - 1, in_text, ex_text))
+
+            elif ex_text != None:
+                if not child.tag in ex_text:
+                    if child.text != '':
+                        t = u'%s %s' % (t, child.text)
+
+                    if depth > 1:
+                        for c in child.children:
+                            t = u'%s %s' % (t, add_child_text(c, depth - 1, in_text, ex_text))
+
+            else:
+                if child.text != '':
+                    t = u'%s %s' % (t, child.text)
+
+                if depth > 1:
+                    for c in child.children:
+                        t = u'%s %s' % (t, add_child_text(c, depth - 1, in_text, ex_text))
+
+            if child.tail != '':
+                t = u'%s %s' % (t, child.tail)
+
+            return t.strip()
+
         if is_data_value('value', node_def):
             sv = node_def['value']
 
@@ -626,6 +811,20 @@ class HTMLnode(DATAnode):
 
             elif node_def[ 'select'] == 'presence':
                 return True
+
+            elif node_def[ 'select'] == 'inclusive text':
+                sv = self.text
+                depth = data_value('depth', node_def, int, 1)
+                in_text = None
+                ex_text = None
+                if is_data_value('include', node_def, list):
+                    in_text = data_value('include', node_def, list)
+
+                elif is_data_value('exclude', node_def, list):
+                    ex_text = data_value('exclude', node_def, list)
+
+                for c in self.children:
+                    sv = u'%s %s' % (sv, add_child_text(c, depth, in_text, ex_text))
 
             else:
                 sv = self.text
@@ -706,85 +905,36 @@ class JSONnode(DATAnode):
             link_values ={}
 
         if is_data_value('key', node_def):
-            if self.key == node_def["key"]:
-                # The requested key matches
-                if not last_node_def:
-                    self.check_for_linkrequest(node_def)
+            if is_data_value(['key','link'], node_def, int):
+                kl = self.get_link(data_value(['key'], node_def, dict), link_values)
 
-                return True
+            else:
+                kl = node_def["key"]
 
-            return False
+            if not self.key == kl:
+                # The requested key doesn't matches
+                return False
 
         elif is_data_value('keys', node_def, list):
-            if self.key in node_def['keys']:
+            klist = []
+            for index in range(len(data_value('keys', node_def, list))):
+                if is_data_value(['keys', index,'link'], node_def, int):
+                    klist.append(self.get_link(data_value(['keys', index], node_def, dict), link_values))
+
+                else:
+                    klist.append(node_def['keys', index])
+
+            if self.key in klist:
                 # This key is in the list with requested keys
-                if not last_node_def:
-                    self.check_for_linkrequest(node_def)
-
-                return True
-
-            return False
-
-        elif is_data_value('keys', node_def, dict) or is_data_value('childkeys', node_def, dict):
-            ck = node_def['childkeys'] if is_data_value('childkeys', node_def, dict) else node_def['keys']
-            # Does it contain the requested key/value pairs
-            for item, v in ck.items():
-                if not item in self.keys:
+                if not self.check_index(node_def, link_values) in (True, None):
                     return False
 
-                val = v
-                if is_data_value('link', v, int) and v["link"] in link_values.keys():
-                    # The requested value is in link_values
-                    val = link_values[v["link"]]
-
-                if self.get_child(item).value != val:
-                    return False
-
-            if not last_node_def:
-                self.check_for_linkrequest(node_def)
-
-            return True
-
-        elif is_data_value(['index','link'], node_def, int):
-            # There is an index request to an earlier linked index
-            if not data_value(['index','link'], node_def, int) in link_values.keys():
-                sys.stderr.write('You requested an index link, but link value %s is not stored!\n' % data_value(['index','link'], node_def, int))
-                return False
-
-            il = link_values[data_value(['index','link'], node_def, int)]
-            if not isinstance(il, int):
-                sys.stderr.write('You requested an index link, but the stored value is no integer!\n')
-                return False
-
-            clist = data_value(['index','calc'], node_def, list)
-            if len(clist) == 2 and isinstance(clist[1], int):
-                if clist[0] == 'min':
-                    il -= clist[1]
-
-                elif clist[0] == 'plus':
-                    il += clist[1]
-
-            if is_data_value(['index','previous'], node_def) and self.child_index < il:
-                return True
-
-            if is_data_value(['index','next'], node_def) and self.child_index > il:
-                return True
-
-            if self.child_index == il:
-                return True
-
             else:
+                # This key isn't in the list with requested keys
                 return False
 
-        elif is_data_value(['index'], node_def, int):
-            # There is an index request to a set value
-            if self.child_index == data_value(['index'], node_def, int):
-                if not last_node_def:
-                    self.check_for_linkrequest(node_def)
-
-                return True
-
-            else:
+        elif is_data_value('index', node_def):
+            if self.check_index(node_def, link_values) in (False, None):
                 return False
 
         elif is_data_value('path', node_def):
@@ -798,6 +948,84 @@ class JSONnode(DATAnode):
                 self.check_for_linkrequest(node_def)
 
             return None
+
+        if is_data_value('childkeys', node_def, (dict, list)) or is_data_value('keys', node_def, dict):
+        #~ if is_data_value('childkeys', node_def) or is_data_value('keys', node_def, dict):
+            ck = []
+            if is_data_value('childkeys', node_def, dict):
+                ck = [node_def['childkeys']]
+
+            elif is_data_value('childkeys', node_def, list):
+                ck = node_def['childkeys']
+
+            elif is_data_value('keys', node_def, dict):
+                ck = [node_def['keys']]
+
+            for cd in ck:
+                if not isinstance(cd, dict):
+                    continue
+
+                for k, v in cd.items():
+                    notv = False
+                    if is_data_value('not', v, list):
+                        # There is a negative childkey match requested
+                        notv = True
+                        if not  k in self.keys:
+                            # but the childkey is not there
+                            continue
+
+                        alist = self.get_value_list(data_value('not', v, list), link_values, 'childkeys')
+
+                    else:
+                        if not  k in self.keys:
+                            # but the childkey is not there
+                            return False
+
+                        alist = self.get_value_list(v, link_values, 'childkeys')
+
+                    if notv:
+                        if len(alist) == 0:
+                            # No values to exclude
+                            continue
+
+                        elif (len(alist) == 1 and alist[0] == None) or self.get_child(k).value in alist:
+                            # the current value is in the list so we exclude
+                            return False
+
+                    else:
+                        if v == None or (len(alist) == 1 and alist[0] == None):
+                            # All values are OK so continue
+                            continue
+
+                        elif len(alist) == 0 or not self.get_child(k).value in alist:
+                            # No values  specified or not present so exclude
+                            return False
+
+        if is_data_value('notchildkeys', node_def, (dict, list)):
+        #~ if is_data_value('notchildkeys', node_def):
+            ck = data_value('notchildkeys', node_def)
+            if not is_data_value('notchildkeys', node_def, list):
+                ck = [ck]
+
+            for cd in ck:
+                if not isinstance(cd, dict):
+                    continue
+
+                for k, v in cd.items():
+                    if k in self.keys:
+                        alist = self.get_value_list(v, link_values, 'notchildkeys')
+                        if v == None or (len(alist) == 1 and alist[0] == None):
+                            # All values are OK so exclude
+                            return False
+
+                        elif len(alist) > 0 and self.get_child(k).value in alist:
+                            # The attribute is in the ban list so exclude
+                            return False
+
+        if not last_node_def:
+            self.check_for_linkrequest(node_def)
+
+        return True
 
     def find_name(self, node_def):
         sv = None
