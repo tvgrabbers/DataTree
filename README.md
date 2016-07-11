@@ -14,7 +14,8 @@ but as this name is already taken in the Python library...
 
 With [version 1.1.3](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.1.3-p20160709)
  * More unified HTML and JSON parsing with added keywords "notchildkeys" and "tags",  
-renamed keyword "childkeys" and extended functionality for some of the others.
+renamed keyword "childkeys" and extended functionality for some of the others.  
+Also allowing to use a linked value in most cases.
  * Added selection keyword "inclusive text" for HTML to include text in sub tags like  
 "i", "b" etc.
  * Added support for a tupple with multiple dtype values in the is_data_value function.
