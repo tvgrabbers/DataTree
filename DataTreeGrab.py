@@ -202,7 +202,6 @@ class _Warnings():
                 warnings.simplefilter("default", dtWarning)
 
     def _show_warning(self, message, category, filename, lineno, file=None):
-        """Hook to write a warning to a file or a Queue; replace if you like."""
         with self.warn_lock:
             message = "\nDataTreeGrab:%s at line:%s: %s\n" % (category.__name__, lineno, message)
             try:
@@ -2256,7 +2255,7 @@ class DataTreeShell():
     def extract_datalist(self, init_start_node = False):
         with self.tree_lock:
             if not isinstance(self.searchtree, DATAtree):
-                warnings.warn('The searchtree has not jet been initialized. Run .init_data() first with a valid dataset')
+                warnings.warn('The searchtree has not jet been initialized. Run .init_data() first with a valid dataset', dtDataWarning)
                 return
 
             if init_start_node:
@@ -2269,7 +2268,7 @@ class DataTreeShell():
                     self.result.append(self.link_values(keydata))
 
             else:
-                warnings.warn('No valid "values" keyword found or no data retrieved to process')
+                warnings.warn('No valid "values" keyword found or no data retrieved to process', dtDataWarning)
                 self.result = self.searchtree.result
 
     def link_values(self, linkdata):
@@ -2288,7 +2287,7 @@ class DataTreeShell():
             varid = data_value("varid", vdef, int)
             if not ((isinstance(linkdata, list) and (0 <= varid < len(linkdata))) \
               or (isinstance(linkdata, dict) and varid in linkdata.keys())):
-                warnings.warn('Requested datavalue "%s" does not exist in: %s'% (varid, linkdata))
+                warnings.warn('Requested datavalue "%s" does not exist in: %s'% (varid, linkdata), dtLinkWarning)
                 return
 
             # remove any leading or trailing spaces on a string/unicode value
@@ -2296,20 +2295,20 @@ class DataTreeShell():
             # check on length restrictions
             if isinstance(value, (str, unicode, list, dict)):
                 if min_length > 0 and len(value) < min_length:
-                    warnings.warn('Requested datavalue "%s" is smaller then'% (varid, min_length))
+                    warnings.warn('Requested datavalue "%s" is smaller then'% (varid, min_length), dtLinkWarning)
                     return
 
                 if max_length > 0 and len(value) > max_length:
-                    warnings.warn('Requested datavalue "%s" is bigger then'% (varid, max_length))
+                    warnings.warn('Requested datavalue "%s" is bigger then'% (varid, max_length), dtLinkWarning)
                     return
 
             if isinstance(value, (int, float)):
                 if min_length > 0 and value < min_length:
-                    warnings.warn('Requested datavalue "%s" is shorter then'% (varid, min_length))
+                    warnings.warn('Requested datavalue "%s" is shorter then'% (varid, min_length), dtLinkWarning)
                     return
 
                 if max_length > 0 and value > max_length:
-                    warnings.warn('Requested datavalue "%s" is longer then'% (varid, max_length))
+                    warnings.warn('Requested datavalue "%s" is longer then'% (varid, max_length), dtLinkWarning)
                     return
 
             # apply any regex, type or calc statements
@@ -2328,7 +2327,7 @@ class DataTreeShell():
             funcid = data_value("funcid", vdef, int)
             default = data_value("default", vdef)
             if funcid == None:
-                warnings.warn('Invalid linkfunction ID "%s" in: %s'% (funcid, vdef))
+                warnings.warn('Invalid linkfunction ID "%s" in: %s'% (funcid, vdef), dtLinkWarning)
                 return
 
             # Process the datavalues given for the function
@@ -2374,11 +2373,11 @@ class DataTreeShell():
                     return dd.group(1)
 
                 else:
-                    warnings.warn('Regex "%s" in: %s returned no value on "%s"'% (search_regex, vdef, value))
+                    warnings.warn('Regex "%s" in: %s returned no value on "%s"'% (search_regex, vdef, value), dtLinkWarning)
                     return
 
             except:
-                warnings.warn('Invalid regex "%s" in: %s'% (search_regex, vdef))
+                warnings.warn('Invalid regex "%s" in: %s'% (search_regex, vdef), dtLinkWarning)
                 return
 
         def check_type(vdef, value):
@@ -2406,11 +2405,11 @@ class DataTreeShell():
                     return bool(value)
 
                 else:
-                    warnings.warn('Invalid type "%s" requested'% (dtype))
+                    warnings.warn('Invalid type "%s" requested'% (dtype), dtLinkWarning)
                     return value
 
             except:
-                warnings.warn('Error on applying type "%s" on "%s"'% (dtype, value))
+                warnings.warn('Error on applying type "%s" on "%s"'% (dtype, value), dtLinkWarning)
                 return None
 
         def calc_value(vdef, value):
@@ -2421,7 +2420,7 @@ class DataTreeShell():
                     value = value * vdef['multiplier']
 
                 except:
-                    warnings.warn('Error on applying multiplier "%s" on "%s"'% (vdef['multiplier'], value))
+                    warnings.warn('Error on applying multiplier "%s" on "%s"'% (vdef['multiplier'], value), dtLinkWarning)
                     #~ traceback.print_exc()
 
             if is_data_value('divider', vdef, float):
@@ -2431,7 +2430,7 @@ class DataTreeShell():
                     value = value / vdef['divider']
 
                 except:
-                    warnings.warn('Error on applying devider "%s" on "%s"'% (vdef['devider'], value))
+                    warnings.warn('Error on applying devider "%s" on "%s"'% (vdef['devider'], value), dtLinkWarning)
                     #~ traceback.print_exc()
 
             return value
