@@ -213,12 +213,12 @@ class _Warnings():
             self.simplefilter(warnaction, dtWarning, caller_id = caller_id)
             self.defaultaction = warnaction
 
-    def _show_warning(self, message, category, caller_id, lineno):
+    def _show_warning(self, message, category, caller_id, severity, lineno):
         with self.warn_lock:
-            message = "\nDataTreeGrab,id:%s:%s at line:%s: %s\n" % (caller_id, category.name, lineno, message)
+            message = "DataTreeGrab,id:%s:%s at line:%s: %s\n" % (caller_id, category.name, lineno, message)
             try:
                 if isinstance(self.warngoal, Queue):
-                    self.warngoal.put((message, caller_id))
+                    self.warngoal.put((message, caller_id, severity))
 
                 else:
                     self.warngoal.write(message)
@@ -266,9 +266,9 @@ class _Warnings():
                 if not filename:
                     filename = module
             registry = globals.setdefault("__warningregistry__", {})
-            self.warn_explicit(message, category, filename, lineno, caller_id, module, registry, globals)
+            self.warn_explicit(message, category, filename, lineno, caller_id, severity, module, registry, globals)
 
-    def warn_explicit(self, message, category, filename, lineno, caller_id=0, module=None, registry=None, module_globals=None):
+    def warn_explicit(self, message, category, filename, lineno, caller_id=0, severity=1, module=None, registry=None, module_globals=None):
         with self.warn_lock:
             lineno = int(lineno)
             if module is None:
@@ -329,12 +329,12 @@ class _Warnings():
                       "Unrecognized action (%r) in warnings.filters:\n %s" %
                       (action, item))
             # Print message and context
-            self._show_warning(message, category, caller_id, lineno)
+            self._show_warning(message, category, caller_id, severity, lineno)
 
     def resetwarnings(self, caller_id = 0):
         with self.warn_lock:
             if caller_id == 0:
-                self.filters[caller_id][:] = []
+                self.filters[:] = []
 
             else:
                 for item in self.filters[:]:
@@ -2544,7 +2544,7 @@ class DataTreeShell():
                     return
 
             except:
-                self.warn('Invalid regex "%s" in: %s'% (search_regex, vdef), dtLinkWarning, 2)
+                self.warn('Invalid value "%s" or invalid regex "%s" in: %s'% (value, search_regex, vdef), dtLinkWarning, 4)
                 return
 
         def check_type(vdef, value):
