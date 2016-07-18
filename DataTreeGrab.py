@@ -1556,7 +1556,7 @@ class DATAtree():
 
                     try:
                         fill_char = sdef[0]
-                        if fill_char in ('\\s', '\\t', '\\n', '\\r', '\\f', '\\v', ' '):
+                        if fill_char in ('\\s', '\\t', '\\n', '\\r', '\\f', '\\v', ' ','\\s*', '\\t*', '\\n*', '\\r*', '\\f*', '\\v*'):
                             fill_char = ' '
                             value = value.strip()
 
@@ -2399,9 +2399,32 @@ class DataTreeShell():
         pass
 
     def init_data(self, data, init_start_node = True):
+        def sort_list(page, path, childkeys):
+            if is_data_value(path, page, list):
+                if len(childkeys) == 1:
+                    data_value(path, page, list).sort(key=lambda l: (l[childkeys[0]]))
+
+                elif len(childkeys) == 2:
+                    data_value(path, page, list).sort(key=lambda l: (l[childkeys[0]], l[childkeys[1]]))
+
+                elif len(childkeys) > 2:
+                    data_value(path, page, list).sort(key=lambda l: (l[childkeys[0]], l[childkeys[1]], l[childkeys[2]]))
+
+            else:
+                self.warn('Sort request {"path": %s, "childkeys": %s}" failed\n   as "path" is not present in the data or is not a list!' % (path, childkeys), dtDataWarning, 1)
+
         with self.tree_lock:
             if isinstance(data, (dict, list)):
                 dttype = 'json'
+                if self.is_data_value(['data', 'sort'], list):
+                    # There is a sort request
+                    for sitem in self.data_value(['data', 'sort'], list):
+                        try:
+                            sort_list(data, data_value('path', sitem, list), data_value('childkeys', sitem, list))
+
+                        except:
+                            self.warn('Sort request "%s" failed!' % (sitem), dtDataWarning, 1)
+
                 self.searchtree = JSONtree(data, self.fle, caller_id = self.caller_id)
 
             elif isinstance(data, (str, unicode)) and data.strip()[0] == "<":
