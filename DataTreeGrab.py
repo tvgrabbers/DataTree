@@ -708,15 +708,19 @@ class HTMLnode(DATAnode):
         DATAnode.__init__(self, dtree, parent)
         with self.node_lock:
             if isinstance(data, (str, unicode)):
-                self.tag = data.lower()
+                self.tag = data.lower().strip()
 
             elif isinstance(data, list):
                 if len(data) > 0:
-                    self.tag = data[0].lower()
+                    self.tag = data[0].lower().strip()
 
                 if len(data) > 1 and isinstance(data[1], (list, tuple)):
                     for a in data[1]:
-                        self.attributes[a[0].lower()] = a[1]
+                        if isinstance(a[1], (str, unicode)):
+                            self.attributes[a[0].lower().strip()] = a[1].strip()
+
+                        else:
+                            self.attributes[a[0].lower().strip()] = a[1]
 
                     if 'class' in self.attributes.keys():
                         self.attr_names.append('class')
@@ -1294,6 +1298,7 @@ class DATAtree():
                         self.timezone = pytz.utc
 
             self.set_current_date()
+            self.set_current_weekdays()
 
     def set_current_date(self, cdate = None):
         with self.tree_lock:
@@ -1321,15 +1326,13 @@ class DATAtree():
                 self.current_date = self.timezone.normalize(datetime.datetime.now(pytz.utc).astimezone(self.timezone)).date()
                 self.current_ordinal = self.current_date.toordinal()
 
-            self.set_current_weekdays()
-
     def set_current_weekdays(self):
         with self.tree_lock:
             rw = self.data_value( "relative-weekdays", dict)
             for name, index in rw.items():
                 self.relative_weekdays[name] = datetime.date.fromordinal(self.current_ordinal + index)
 
-            current_weekday = self.current_date.weekday()
+            current_weekday = self.timezone.normalize(datetime.datetime.now(pytz.utc).astimezone(self.timezone)).weekday()
             for index in range(len(self.weekdays)):
                 name = self.weekdays[index]
                 if index < current_weekday:
@@ -1907,7 +1910,7 @@ class HTMLtree(HTMLParser, DATAtree):
                 self.start_node = self.root
 
             except:
-                self.warn('Unable to parse the HTML data. Invalid dataset!', dtDataWarning, 1)
+                self.warn('Unable to parse the HTML data. Invalid dataset!\n' + traceback.print_exc(), dtDataWarning, 1)
                 self.start_node = NULLnode()
 
     def count_tags(self, data):
@@ -2163,7 +2166,7 @@ class DataTreeShell():
 
             elif isinstance(cdate, int):
                 self.current_ordinal = cdate
-                datetime.datetime.fromordinal(cdate)
+                self.current_date = datetime.date.fromordinal(cdate)
 
             else:
                 if cdate != None:
