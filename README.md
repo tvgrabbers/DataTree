@@ -12,6 +12,18 @@ but as this name is already taken in the Python library...
  * You can make the data_def available on a central location while distributing  
    the aplication and so giving your users easy access to (automated) updates.
 
+With [version 1.1.3](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.1.3-p20160709)
+ * More unified HTML and JSON parsing with added keywords "notchildkeys" and "tags",  
+renamed keyword "childkeys" and extended functionality for some of the others.  
+Also allowing to use a linked value in most cases.
+ * Added selection keyword "inclusive text" for HTML to include text in sub tags like  
+"i", "b" etc.
+ * Added support for a tupple with multiple dtype values in the is_data_value function.
+
+With [version 1.1.2](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.1.2-p20160705)
+ * A new warnings category for invalid data imports into a tree
+ * A new search keyword "notattrs"
+
 With [version 1.1](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.1.1-p20160628) we have next to some patches added several new features:  
  * Added support for 12 hour time values
  * Added the str-list type 
