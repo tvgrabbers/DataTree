@@ -12,6 +12,11 @@ but as this name is already taken in the Python library...
  * You can make the data_def available on a central location while distributing  
    the aplication and so giving your users easy access to (automated) updates.
 
+With [version 1.1.4](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.1.4-p20160723)
+ * Implemented a stripped and extended Warnings framework
+ * Added optional sorting before extraction of part of a JSON tree
+ * Some fixes
+
 With [version 1.1.3](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.1.3-p20160709)
  * More unified HTML and JSON parsing with added keywords "notchildkeys" and "tags",  
 renamed keyword "childkeys" and extended functionality for some of the others.  
