@@ -7,6 +7,21 @@
 Spin-off python module for extracting structured data from HTML and JSON pages.  
 It is at the heart of the tv_grab_py_API and was initially named just DataTree,  
 but as this name is already taken in the Python library...
+
+###Requirements
+ * Python 2.7.9 or higher (currently not python 3.x)
+ * The [pytz module](http://pypi.python.org/pypi/pytz)
+
+###Installation
+* Especially under Windows, make sure Python 2.7.9 or higher is installed 
+* Make sure the above mentioned Python 2 package is installed on your system
+* Download the latest release and unpack it into a directory
+* Run:
+  * under Linux: `sudo ./setup.py install` from that directory
+  * under Windows depending on how you installed Python:
+    * `setup.py install` from that directory
+    * Or: `Python setup.py install` from that directory
+
 ###Main advantages
  * It gives you a highly dependable dataset from a potentially changable source.
  * You can easily update on changes in the source without touching your code.
