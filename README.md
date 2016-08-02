@@ -57,12 +57,6 @@ has been developed. It can first extract a list of keyNodes and extract for each
 of them the same data-list. During the extraction several data manipulation  
 functions are available.  
 
-The current install will only install under Python 2. It probably will run under  
-Python 3 but is not jet tested. It is still considered beta  
-It will need the pytz package: https://pypi.python.org/pypi/pytz/ 
-
-Run: `sudo ./setup.py install` to install it into your Python2 module tree
-
 Check [the WIKI](https://github.com/tvgrabbers/DataTree/wiki) for the syntax. Here a short list of possible keywords:      
 ###path-dict keywords:
  * "path": "all", "root", "parent"
