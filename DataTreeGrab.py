@@ -2185,24 +2185,23 @@ class DataTreeShell():
                 return u_part
 
             # get a variable
-            else:
-                if isinstance(u_part, int):
-                    urlid = u_part
-                    u_data = []
+            elif isinstance(u_part, int):
+                urlid = u_part
+                u_data = []
 
-                elif isinstance(u_part, list):
-                    if is_data_value(0, u_part, int):
-                        urlid = u_part[0]
-                        u_data = u_part[1:]
-
-                    else:
-                        urlid = 0
-                        u_data = u_part
+            elif isinstance(u_part, list):
+                if is_data_value(0, u_part, int):
+                    urlid = u_part[0]
+                    u_data = u_part[1:]
 
                 else:
-                    return None
+                    urlid = 0
+                    u_data = u_part
 
-                return self.url_functions(urlid, u_data)
+            else:
+                return None
+
+            return self.url_functions(urlid, u_data)
 
         with self.tree_lock:
             self.url_data = url_data
