@@ -7,34 +7,90 @@ from threading import Thread
 from copy import copy, deepcopy
 from DataTreeGrab import is_data_value, data_value
 
-#tv_grab_keys.json syntax
-#dict of key names with a dict with:
+#json_struct syntax
+#
+# version:
+# select_struct_list: list of dicts
+#       teststruct: the name of the struct
+#       description: a text to use on succesful idenification containing one "%s" to fill with the name of the identified file
+#       title: a regex to match the file title
+#       type: the root type: dict or list
+#       keyvalues: with:
+#           key: a key in the root or a list of keys to follow
+#           present: boolean whether it should present or absent
+#           value: the required value
+#           default: the default value when absent
+# The rest of the root keys should be struct names
+#   Every struct name should start with "struct-"
+#   To be used as type or in include it must be listed in a "struct_list" in json_struct-files.json
+#   to be auto recognized it must be defined in the "select_struct_list" list above
+#
+# struct root keywords:
+#       type: list, dict or numbered dict
+#       include: a struct to include. The type from that struct will be taken
+#           the definitions in the struct are dominant
+#           any keys not present are added from the included struct
+#       lookup_lists: dict with named lookup list to be used as type, a name should start with "lst-"
+#           with:
+#               a list keyword holding the actual list
+#           or:
+#               keyword: the keyword to extract the values from
+#               values: the type of values: keys, intkeys or values
+#               level: the level to look, default is 1
+#           and:
+#               append: True or False on whether to overwrite an existing list
+#       reference_values: dict with named reference values to use in a conditional set
+#           with:
+#               keyword: a list of keyword to follow to the value
+#               type: either: integer, string or boolean
+#               default: the value to use if the the value is not found
+#       report: text to add in a report to describe the selection critiria
+#   Any value in the below types dict
+#
 #   types: list of (types or type-lists) or
 #       list of dicts with
 #           type (implied): type or type-list
-#           in: list of allowed values
-#           length:
-#           if a list:
+#           length: (for string, list or dict)
+#           if a list (potential root for a struct):
 #               items: positional type(list) like 'types'
 #               reverse_items: reversed positional type(list) like 'types'
-#           if a dict
+#           if a dict (potential root for a struct):
 #               keys:  type or type-list
-#               required: dict of key names with a dict with:
-#               sugested: dict of key names with a dict with:
-#               optional: dict of key names with a dict with:
-#               allowed: "all"
-#               unused_keys: list of known keys
-#               ignore_keys: list of unknown keys
-#                   (all keys matching regex: '--.*?--' are ignored)
 #               either: list of alternatives
-#               forbidden_keys: list of forbidden keys
-#   default:
+#               required: dict of key names with a dict with a types list:
+#               sugested: dict of key names with a dict with a types list:
+#               optional: dict of key names with a dict with a types list:
+#               conditional: dict of key names with a dict with a types list:
+#                   with extra keys:
+#                       reference_key: a key value defined in reference_values
+#                       value: a list of values to compare with
+#                       true: status if in value list defaulting to the false status
+#                       false: status if not in value list defaulting to 3
+#                           1: required (test and report on absence, used in selecting an either sub-struct)
+#                           2: sugested (test and report on absence)
+#                           3: optional (test and report on absence)
+#                           0: ignore (mark as known and do not test or report)
+#                          -1: unused (mark as known, report on presence)
+#                          -2: forbidden (mark as known, report on presence, used in selecting an either sub-struct)
+#               allowed: "all"
+#               ignore_keys: list of 'unknown' keys
+#               unused_keys: list of known keys
+#                   (all keys matching regex: '--.*?--' are ignored)
+#               forbidden_keys: list of forbidden keys (at the root of a struct or an either)
+#   default: valid for the last item in a types list
+#
+# Valid types:
+#   dict ,numbered dict ,list, integer, string, tz-string, boolean, time, date, url, none
+#   any struct listed in the "struct_list" lists in json_struct-files.json
+#   any lookup_list defined in the struct root, included structs or parent structs
 #
 # Type Errors
 # 1: Wrong Type
 # 2: Value not in allowed list
 # 3: Wrong Length
-# 4: Wrong key-Type
+# 4: Invalid struct type
+# 8: Wrong key-Type
+# 16 key value not in allowed list
 
 class test_JSON():
     def __init__(self, encoding = 'utf-8', struct_file = None, struct_path = None):
@@ -42,15 +98,17 @@ class test_JSON():
         self.testfile = None
         self.trep = {}
         self.errors = {}
-        self.etypes = ('type_errors', 'missing_keys', 'forbidden_keys',
+        self.etypes = ('type_errors', 'missing_keys',
                             'unused_keys', 'unknown_keys', 'either_test')
-        self.imp = ('other',"required", "sugested", "optional")
+        self.imp = ('other',"required", "sugested", "optional", 'conditional')
+        self.key_lists = ('unused_keys', 'ignore_keys', 'forbidden_keys')
         self.select_struct_list = []
         self.struct_list = []
         self.struct_tree = {}
         self.lookup_lists = {}
-        #~ self.only_local_files = False
-        self.only_local_files = True
+        self.reference_values = {}
+        self.only_local_files = False
+        #~ self.only_local_files = True
         self.get_struct_files(struct_file, struct_path)
 
     def add_extra_lookup_lists(self, struct_name):
@@ -63,7 +121,21 @@ class test_JSON():
 
         for t in text:
             if isinstance(t, (str,unicode)):
+                if not t[-1] == '\n':
+                    t+= '\n'
+
                 sys.stderr.write(text.encode(self.encoding, 'replace'))
+
+    def report(self, text):
+        if not isinstance(text, list):
+            text = [text]
+
+        for t in text:
+            if isinstance(t, (str,unicode)):
+                if not t[-1] == '\n':
+                    t+= '\n'
+
+                sys.stdout.write(t.encode(self.encoding, 'replace'))
 
     def init_error(self):
         self.errors = {}
@@ -71,30 +143,61 @@ class test_JSON():
             self.errors[imp] = {}
 
     def add_error(self, err, etype, vpath=None, importance=0):
-        if not (0<= importance < len(self.imp)):
+        def make_path(epath):
+            if not isinstance(epath, list):
+                mpath = '/'
+
+            else:
+                mpath = ''
+                for p in epath:
+                    mpath = '%s/%s' % (mpath, p)
+
+            return mpath
+
+        def append_error(limp, ltype, epath, eval, errno = None, extend = False):
+            limp = self.imp[limp]
+            lpath = make_path(epath)
+            if not limp in self.errors.keys():
+                self.errors[limp] = {}
+
+            if not ltype in self.errors[limp].keys():
+                self.errors[limp][ltype] = {}
+
+            if errno == None:
+                if not lpath in self.errors[limp][ltype].keys():
+                    self.errors[limp][ltype][lpath] = []
+
+                if etype == 'either_test':
+                    self.errors[limp][ltype][lpath] = eval
+
+                elif extend:
+                    self.errors[limp][ltype][lpath].extend(eval)
+
+                else:
+                    self.errors[limp][ltype][lpath].append(eval)
+
+            else:
+                if not lpath in self.errors[limp][ltype].keys():
+                    self.errors[limp][ltype][lpath] = {}
+
+                if not errno in self.errors[limp][ltype][lpath].keys():
+                    self.errors[limp][ltype][lpath][errno] = []
+
+                if extend:
+                    self.errors[limp][ltype][lpath][errno].extend(eval)
+
+                else:
+                    self.errors[limp][ltype][lpath][errno].append(eval)
+
+        if not (0<= importance < len(self.imp) - 1):
             importance = 0
 
-        imp = self.imp[importance]
         if not etype in self.etypes:
             etype = "other"
-
-        if not isinstance(vpath, list):
-            epath = '/'
-
-        else:
-            epath = ''
-            for p in vpath:
-                epath = '%s/%s' % (epath, p)
 
         if etype == 'type_errors':
             if not isinstance(err, list):
                 return
-
-            if not etype in self.errors[imp].keys():
-                self.errors[imp][etype] = {}
-
-            if not epath in self.errors[imp][etype].keys():
-                self.errors[imp][etype][epath] = {}
 
             for e in err:
                 if e['error'] == 0:
@@ -102,68 +205,40 @@ class test_JSON():
 
                 if e['error'] & 7:
                     ve = e['error'] & 7
-                    if not ve in self.errors[imp][etype][epath].keys():
-                        self.errors[imp][etype][epath][ve] = []
-
                     if ve in (1, 2, 4):
-                        self.errors[imp][etype][epath][ve].append({'type':e['type'], 'value': deepcopy(e['value'])})
+                        append_error(importance, etype, e['path'], {'type':e['type'], 'value': deepcopy(e['value'])}, ve)
 
                     if ve == 3:
-                        self.errors[imp][etype][epath][ve].append({'length':e['length'], 'value': deepcopy(e['value'])})
+                        append_error(importance, etype, e['path'], {'length':e['length'], 'value': deepcopy(e['value'])}, ve)
 
                 if e['error'] & 8:
                     # Key type error
-                    if not 1 in self.errors[imp][etype][epath].keys():
-                        self.errors[imp][etype][epath][8] = []
-
                     for k, v in e['keyerrs'].items():
-                        self.errors[imp][etype][epath][8].append({'type':v, 'value': k})
+                        if v in self.lookup_lists.keys():
+                            append_error(importance, etype, e['path'], {'type':v, 'value': k}, 16)
 
-            for p  in self.errors[imp][etype].keys()[:]:
-                if len(self.errors[imp][etype][p]) == 0:
-                    del self.errors[imp][etype][p]
+                        else:
+                            append_error(importance, etype, e['path'], {'type':v, 'value': k}, 8)
 
-            if len(self.errors[imp][etype]) == 0:
-                del self.errors[imp][etype]
-
-            return
-
-        if etype in ('missing_keys', 'forbidden_keys', 'unused_keys', 'unknown_keys'):
-            if not etype in self.errors[imp].keys():
-                self.errors[imp][etype] = {}
-
-            if not epath in self.errors[imp][etype].keys():
-                self.errors[imp][etype][epath] = []
-
-            if isinstance(err, list):
-                self.errors[imp][etype][epath].extend(err)
+        elif etype == 'either_test':
+            if len(err['list'][0][1]) == 0 and len(err['list'][0][2]) == 0 and len(err['list'][0][3]) == 0:
+                append_error(0, etype, vpath, err)
 
             else:
-                self.errors[imp][etype][epath].append(err)
+                append_error(1, etype, vpath, err)
 
-            return
+        elif etype in ('missing_keys', 'unused_keys', 'unknown_keys'):
+            if isinstance(err, list):
+                append_error(importance, etype, vpath, err, None, True)
 
-        if etype == 'either_test':
-            if not etype in self.errors.keys():
-                self.errors[etype] = {}
+            else:
+                append_error(importance, etype, vpath, err)
 
-            if not epath in self.errors[etype].keys():
-                self.errors[etype][epath] = []
-
-            self.errors[etype][epath].append(err)
-            return
-
-        if not etype in self.errors['other'].keys():
-            self.errors['other'][etype] = {}
-
-        if not epath in self.errors['other'][etype].keys():
-            self.errors['other'][etype][epath] = []
-
-        if isinstance(err, list):
-            self.errors['other'][etype][epath].extend(err)
+        elif isinstance(err, list):
+            append_error(0, etype, vpath, err, None, True)
 
         else:
-            self.errors['other'][etype][epath].append(err)
+            append_error(0, etype, vpath, err)
 
     def get_struct_files(self, struct_file = None, struct_path = None):
         if 'HOME' in os.environ:
@@ -183,11 +258,7 @@ class test_JSON():
         if not os.path.exists(struct_path):
             os.mkdir(struct_path)
 
-        if self.only_local_files:
-            keyfiles = self._get_json_data(struct_file, struct_path = '/home/hika/Git/git/sourcematching/json_struct/')
-
-        else:
-            keyfiles = self._get_json_data(struct_file, struct_path = struct_path)
+        keyfiles = self._get_json_data(struct_file, struct_path = struct_path)
         if not isinstance(keyfiles, dict):
             self.log( 'We could not acces the "%s.json" file\n' % struct_file)
             self.struct_tree = None
@@ -195,11 +266,7 @@ class test_JSON():
 
         for item in data_value('files', keyfiles, list):
             for k, v in item.items():
-                if self.only_local_files:
-                    fle = self._get_json_data(k, struct_path = '/home/hika/Git/git/sourcematching/json_struct/')
-
-                else:
-                    fle = self._get_json_data(k, data_value("version", v, int), struct_path)
+                fle = self._get_json_data(k, data_value("version", v, int), struct_path)
 
                 if not isinstance(fle, dict):
                     continue
@@ -210,8 +277,8 @@ class test_JSON():
                         self.struct_list.append(s)
                         self.struct_tree[s] = fle[s]
 
-    def init_struct(self,struct_name):
-        self.load_lookup_lists(struct_name)
+    def init_struct(self,struct_name, testval):
+        self.load_lookup_lists(struct_name, testval)
         include_list = data_value([struct_name, "include"], self.struct_tree)
         if isinstance(include_list, (str,unicode)):
             include_list = [include_list]
@@ -219,14 +286,13 @@ class test_JSON():
         if isinstance(include_list, list):
             for include_struct in include_list:
                 if include_struct in self.struct_list:
-                    self.init_struct(include_struct)
-                    #~ print 'including %s in %s'% (include_struct, struct_name)
+                    self.init_struct(include_struct, testval)
                     self.struct_tree[struct_name] = self.merge_structs(self.struct_tree[struct_name], self.struct_tree[include_struct])
 
             if "include" in self.struct_tree[struct_name].keys():
                 del self.struct_tree[struct_name]["include"]
 
-    def load_lookup_lists(self, struct_name):
+    def load_lookup_lists(self, struct_name, testval):
         # Load reference lists from the grabber_datafile
         def fill_list():
             if v == 'keys' and isinstance(dset, dict):
@@ -259,13 +325,13 @@ class test_JSON():
                 lookup_lists = []
                 v = data_value(["values"], ldef, str)
                 level = data_value(["level"], ldef, int, 1)
-                kw = data_value(["keyword"], ldef)
+                kw = data_value(["keyword"], ldef, list)
                 if level == 1:
-                    dset = data_value(kw,self.testfile)
+                    dset = data_value(kw, testval)
                     fill_list()
 
                 elif level == 2:
-                    bset = data_value(kw,self.testfile)
+                    bset = data_value(kw, testval)
                     if isinstance(bset, list):
                         for dset in bset:
                             fill_list()
@@ -292,26 +358,42 @@ class test_JSON():
                 else:
                     self.lookup_lists[int_name] = list(set(int_list))
 
+        for k, ldef in data_value([struct_name, "reference_values"],self.struct_tree, dict).items():
+            kw = data_value(["keyword"], ldef, list)
+            vtype = data_value(["type"], ldef, str)
+            default = data_value(["default"], ldef, default = None)
+            if vtype == 'integer':
+                self.reference_values[k] = data_value(kw, testval, int, default = default)
+
+            elif vtype == 'string':
+                self.reference_values[k] = data_value(kw, testval, (str, unicode), default = default)
+
+            elif vtype == 'boolean':
+                self.reference_values[k] = data_value(kw, testval, bool, default = default)
+
+            else:
+                self.reference_values[k] = data_value(kw, testval, default = default)
+
         self.add_extra_lookup_lists(struct_name)
 
     def merge_structs(self, struct1, struct2):
         # struct2 is given through the "include" keyword in struct1
         def key_list(sstruct):
             klist = []
-            for g in ('required', 'sugested', 'optional'):
-                klist.extend(data_value([g], sstruct, dict).keys())
+            for g in range(1, len(self.imp)):
+                klist.extend(data_value([self.imp[g]], sstruct, dict).keys())
 
-            for g in ('unused_keys', 'ignore_keys', 'forbidden_keys'):
+            for g in self.key_lists:
                 klist.extend(data_value([g], sstruct, list))
 
             return klist
 
         def check_presence(sstruct, skey):
-            for g in ('required', 'sugested', 'optional'):
-                if is_data_value([g, skey], sstruct):
-                    return g
+            for g in range(1, len(self.imp)):
+                if is_data_value([self.imp[g], skey], sstruct):
+                    return self.imp[g]
 
-            for g in ('unused_keys', 'ignore_keys', 'forbidden_keys'):
+            for g in self.key_lists:
                 if skey in data_value([g], sstruct, list):
                     return g
 
@@ -320,7 +402,6 @@ class test_JSON():
         def merge_dict(sstruct1, sstruct2, stype):
             mstruct = {}
             addedlist = []
-            #~ print stype
             mstruct['type'] = stype
             if is_data_value('base-type', struct2, str):
                 mstruct['base-type'] = struct2['base-type']
@@ -333,17 +414,16 @@ class test_JSON():
                 for item in data_value(['either'], sstruct1, list):
                     addedlist.extend(key_list(item))
                 addedlist = list(set(addedlist))
-                #~ print ' Added "either" from struct1 with', key_list(item)
                 mstruct['either'] = deepcopy(sstruct1['either'])
 
             elif is_data_value('either', sstruct2, list):
                 for item in data_value(['either'], sstruct2, list):
                     addedlist.extend(key_list(item))
                 addedlist = list(set(addedlist))
-                #~ print ' Added "either" from struct2 with', key_list(item)
                 mstruct['either'] = deepcopy(sstruct2['either'])
 
-            for g in ('required', 'sugested', 'optional'):
+            for imp in range(1, len(self.imp)):
+                g = self.imp[imp]
                 for skey in data_value(g, sstruct1, dict).keys():
                     if skey in addedlist:
                         continue
@@ -352,10 +432,9 @@ class test_JSON():
                     if not g in mstruct.keys():
                         mstruct[g] = {}
 
-                    #~ print ' Added from struct1', g, skey
                     mstruct[g][skey] = deepcopy(sstruct1[g][skey])
 
-            for g in ('unused_keys', 'ignore_keys', 'forbidden_keys'):
+            for g in self.key_lists:
                 for skey in data_value(g, sstruct1, list):
                     if skey in addedlist:
                         continue
@@ -364,10 +443,10 @@ class test_JSON():
                     if not g in mstruct.keys():
                         mstruct[g] = []
 
-                    #~ print ' Added from struct1', g, skey
                     mstruct[g].append(skey)
 
-            for g in ('required', 'sugested', 'optional'):
+            for imp in range(1, len(self.imp)):
+                g = self.imp[imp]
                 for skey in data_value(g, sstruct2, dict).keys():
                     if skey in addedlist:
                         continue
@@ -376,10 +455,9 @@ class test_JSON():
                     if not g in mstruct.keys():
                         mstruct[g] = {}
 
-                    #~ print ' Added from struct2', g, skey
                     mstruct[g][skey] = deepcopy(sstruct2[g][skey])
 
-            for g in ('unused_keys', 'ignore_keys', 'forbidden_keys'):
+            for g in self.key_lists:
                 for skey in data_value(g, sstruct2, list):
                     if skey in addedlist:
                         continue
@@ -388,16 +466,13 @@ class test_JSON():
                     if not g in mstruct.keys():
                         mstruct[g] = []
 
-                    #~ print ' Added from struct2', g, skey
                     mstruct[g].append(skey)
 
             for k in (('keys', None), ('allowed', str), ('length', int)):
                 if is_data_value(k[0], sstruct1, k[1], True):
-                    #~ print ' Added from struct1', k
                     mstruct[k[0]] = deepcopy(sstruct1[k[0]])
 
                 elif is_data_value(k[0], sstruct2, k[1], True):
-                    #~ print ' Added from struct2', k
                     mstruct[k[0]] = deepcopy(sstruct2[k[0]])
 
             return mstruct
@@ -413,17 +488,14 @@ class test_JSON():
 
             for k in (('items', list), ('reverse_items', list), ('length', int)):
                 if is_data_value(k[0], sstruct1, k[1], True):
-                    #~ print ' Adding items list from struct1 ', sstruct1[k[0]]
                     mstruct[k[0]] = deepcopy(sstruct1[k[0]])
 
                 elif is_data_value(k[0], sstruct2, k[1], True):
-                    #~ print ' Adding items list from struct2 ', sstruct2[k[0]]
                     mstruct[k[0]] = deepcopy(sstruct2[k[0]])
 
             return mstruct
 
         if isinstance(struct2, list):
-            #~ print 'Replacing from struct2'
             return deepcopy(struct2)
 
         if data_value('type', struct2) in ('dict', 'numbered dict'):
@@ -432,7 +504,6 @@ class test_JSON():
         if data_value('type', struct2)== 'list':
             return merge_list(struct1, struct2, data_value('type', struct2))
 
-        #~ print 'Replacing from struct2'
         return deepcopy(struct2)
 
     def test_file(self, file_name, struct_name = None):
@@ -445,6 +516,11 @@ class test_JSON():
         try:
             self.testfile = json.load(j_file)
 
+        except(ValueError) as e:
+            self.log('The file: "%s" gives the following JSON error:\n' % file_name.split('/')[-1])
+            self.log( '  %s\n' % e)
+            return 2
+
         except:
             self.log(traceback.format_exc())
             self.file_struct = None
@@ -453,10 +529,10 @@ class test_JSON():
         if struct_name != None:
             if struct_name in self.struct_list:
                 self.file_struct = struct_name
-                self.log('Testing "%s" with "%s"\n' % (file_name, struct_name))
+                self.log('Testing "%s" with "%s"\n' % (file_name.split('/')[-1], struct_name))
 
             else:
-                self.log(['The file %s is a correct JSON file\n' % file_name,
+                self.log(['The file %s is a correct JSON file\n' % file_name.split('/')[-1],
                             '  but "%s" is not a recognized struct name.\n'])
                 self.file_struct = None
                 return 3
@@ -495,17 +571,17 @@ class test_JSON():
 
                 struct_name = data_value("teststruct", struct_def, str)
                 self.file_struct = struct_name
-                self.log('Testing "%s" with "%s"\n' % (file_name, struct_name))
+                self.log('Testing "%s" with "%s"\n' % (file_name.split('/')[-1], struct_name))
                 break
 
         else:
-            self.log(['The file %s is a correct JSON file\n' % file_name,
+            self.log(['The file %s is a correct JSON file\n' % file_name.split('/')[-1],
                         '  but is not recognized.\n'])
             self.file_struct = None
             return 3
 
         self.init_error()
-        self.init_struct(struct_name)
+        self.init_struct(struct_name, self.testfile)
         tstruct = self.struct_tree[struct_name]
         if data_value('type', tstruct, str) in ('dict', 'numbered dict'):
             self.test_dict(tstruct, self.testfile)
@@ -513,25 +589,39 @@ class test_JSON():
         elif data_value('type', tstruct, str) == 'list':
             self.test_list(tstruct, self.testfile)
 
-        if len(self.errors['required']) == 0:
-            self.log('And no serieus errors were found!\n')
-
-        print self.errors
+        self.report_errors()
         return 0
 
     def test_struct(self, struct_name, testval):
-        self.init_struct(struct_name)
+        self.init_struct(struct_name, testval)
         sstruct = self.struct_tree[struct_name]
         if self.test_type(sstruct, testval) > 0:
             return False
 
         if self.trep['type'] in ('dict', 'numbered dict'):
-            for k, v in data_value(['required'], sstruct, dict).items():
+            for k in data_value(['required'], sstruct, dict).keys():
                 if not k in testval.keys():
                     return False
 
             for k in data_value(['forbidden_keys'], sstruct, list):
                 if k in testval.keys():
+                    return False
+
+            for k in data_value(['conditional'], sstruct, dict).keys():
+                revkey = data_value(['conditional', k, 'reference_key'], sstruct, str)
+                revval = data_value(['conditional', k, 'value'], sstruct, list)
+                impfalse = data_value(['conditional', k, 'false'], sstruct, int, 3)
+                imptrue = data_value(['conditional', k, 'true'], sstruct, int, impfalse)
+                if revkey in self.reference_values.keys() and self.reference_values[revkey] in revval:
+                    imp = imptrue
+
+                else:
+                    imp = impfalse
+
+                if imp == 1 and not k in testval.keys():
+                    return False
+
+                if imp == -2 and k in testval.keys():
                     return False
 
         #~ elif self.trep['type'] == 'list':
@@ -541,11 +631,6 @@ class test_JSON():
         return True
 
     def test_type(self, dtypes, val):
-        # Type Errors
-        # 1: Wrong Type
-        # 2: Value not in allowed list
-        # 3: Wrong Length
-        # 8: Wrong key-Type
         def set_error(err):
             if len(keyerrs) > 0:
                 err += 8
@@ -602,6 +687,9 @@ class test_JSON():
                     except:
                         keyerrs[k] = 'numeric (integer enclosed in double quotes)'
 
+                if len(keyerrs) > 0:
+                    return set_error(1)
+
             ktype = None
             if is_data_value("keys", dtypes, str, True):
                 ktype = data_value("keys", dtypes, str)
@@ -614,7 +702,7 @@ class test_JSON():
                     if re.match('--.*?--', k):
                         continue
 
-                    if self.test_type(ktype, k) != 0:
+                    if self.test_type(ktype, k) > 0:
                         # Wrong key-type
                         keyerrs[k] = ktype
 
@@ -678,7 +766,7 @@ class test_JSON():
 
         elif dtype in self.struct_list:
              if not self.test_struct(dtype, val):
-                return set_error(1)
+                return set_error(4)
 
         else:
             pass
@@ -769,16 +857,41 @@ class test_JSON():
                     if k in testval.keys():
                         forbidden.append(k)
 
+                for k, v in data_value(['either', item, 'conditional'], sstruct, dict).items():
+                    revkey = data_value(['either', item, 'conditional', k, 'reference_key'], sstruct, str)
+                    revval = data_value(['either', item, 'conditional', k, 'value'], sstruct, list)
+                    impfalse = data_value(['either', item, 'conditional', k, 'false'], sstruct, int, 3)
+                    imptrue = data_value(['either', item, 'conditional', k, 'true'], sstruct, int, impfalse)
+                    if revkey in self.reference_values.keys() and self.reference_values[revkey] in revval:
+                        imp = imptrue
+
+                    else:
+                        imp = impfalse
+
+                    if imp == 1:
+                        if not k in testval.keys():
+                            missing.append(k)
+                            continue
+
+                        typelist = data_value(["types", 0], v)
+                        if self.test_type(typelist, testval[k]) > 0:
+                            wrongtype[k] = self.trep.copy()
+
+                    if imp == -2 and k in testval.keys():
+                        forbidden.append(k)
+
                 testlist.append((item, missing, forbidden, wrongtype))
 
             # We Sort to get the most likely one ( with in order the least missing keys, the least forbidden keys and the least faulty keys)
             testlist.sort(key=lambda k: (len(k[1]), len(k[2]), len(k[3])))
-            self.add_error(testlist, 'either_test', vpath)
+            text = data_value('report', sstruct, str)
+            self.add_error({'text': text, 'list': testlist}, 'either_test', vpath)
 
             # We use alternative testlist[0][0]
             item = testlist[0][0]
             teststruct = deepcopy(sstruct)
-            for dset in ("required", "sugested", "optional"):
+            for imp in range(1, len(self.imp)):
+                dset = self.imp[imp]
                 if dset in data_value(['either', item], sstruct, dict).keys():
                     if not dset in teststruct.keys():
                         teststruct[dset] = {}
@@ -786,7 +899,7 @@ class test_JSON():
                     for dkey in data_value(['either', item, dset], sstruct, dict).keys():
                         teststruct[dset][dkey] = data_value(['either', item, dset, dkey], sstruct)
 
-            for dset in ("ignore_keys", "unused_keys", "forbidden_keys"):
+            for dset in self.key_lists:
                 if dset in data_value(['either', item], sstruct, dict).keys():
                     if not dset in teststruct.keys():
                         teststruct[dset] = copy(data_value(['either', item, dset], sstruct, list))
@@ -797,9 +910,12 @@ class test_JSON():
             if 'allowed' in data_value(['either', item], sstruct, dict).keys():
                 teststruct['allowed'] = copy(data_value(['either', item, 'allowed'], sstruct, list))
 
-        known_keys = data_value(['ignore_keys'], teststruct, list)[:]
+        forbidden_list = data_value(['forbidden_keys'], teststruct, list)[:]
+        unused_list = data_value(['unused_keys'], teststruct, list)[:]
+        ignore_list = data_value(['ignore_keys'], teststruct, list)[:]
+        known_keys = ignore_list[:]
         missing = {}
-        for imp in range(1, len(self.imp)):
+        for imp in range(1, len(self.imp) - 1):
             dset = self.imp[imp]
             missing[imp] = []
             known_keys.extend(data_value([dset], teststruct, dict).keys())
@@ -811,37 +927,71 @@ class test_JSON():
 
                 # get the type definition list for this key
                 typelist = data_value([dset, dkey,"types"], teststruct, default = [])
+                spath = [] if vpath == None else copy(vpath)
+                spath.append(dkey)
+                self.add_error(self.test_typelist(typelist, testval[dkey], spath), 'type_errors', spath, imp)
+
+        for dkey in data_value(['conditional'], teststruct, dict).keys():
+            revkey = data_value(['conditional', dkey, 'reference_key'], teststruct, str)
+            revval = data_value(['conditional', dkey, 'value'], teststruct, list)
+            impfalse = data_value(['conditional', dkey, 'false'], teststruct, int, 3)
+            imptrue = data_value(['conditional', dkey, 'true'], teststruct, int, impfalse)
+            if revkey in self.reference_values.keys() and self.reference_values[revkey] in revval:
+                imp = imptrue
+
+            else:
+                imp = impfalse
+
+            if imp in range(1, len(self.imp) - 1):
+                known_keys.append(dkey)
+                dset = self.imp[imp]
+                # test on the presence of defined keys
+                if not dkey in testval.keys():
+                    if not imp in missing.keys():
+                        missing[imp] = []
+
+                    missing[imp].append(dkey)
+                    continue
+
+                # get the type definition list for this key
+                typelist = data_value([dset, dkey,"types"], teststruct, default = [])
                 # set the context
                 spath = [] if vpath == None else copy(vpath)
                 spath.append(dkey)
                 self.add_error(self.test_typelist(typelist, testval[dkey], spath), 'type_errors', spath, imp)
 
+            # ignore the key
+            elif imp == 0:
+                ignore_list.append(dkey)
+                known_keys.append(dkey)
+
+            # The key is unused
+            elif imp == -1:
+                unused_list.append(dkey)
+
+            # The key is forbidden
+            elif imp == -2:
+                forbidden_list.append(dkey)
+
         # Check on forbidden or unused keys
         # and undefined keys unless no keys are defined or 'allowed: all' is set
         unknown = []
         unused = []
-        forbidden = []
         for dkey in testval.keys():
             if not dkey in known_keys and not re.match('--.*?--', dkey):
-                if dkey in data_value(['forbidden_keys'], teststruct, list):
-                    forbidden.append(dkey)
-
-                elif dkey in data_value(['unused_keys'], teststruct, list):
-                    unused.append(dkey)
+                if dkey in forbidden_list or dkey in unused_list:
+                        unused.append(dkey)
 
                 elif data_value("allowed", teststruct, str) != 'all':
-                    for dset in ("required", "sugested", "optional"):
-                        if dset in teststruct:
+                    for dset in range(1, len(self.imp)):
+                        if self.imp[dset] in teststruct:
                             unknown.append(dkey)
                             break
 
         # Report found errors
-        for imp in range(1, len(self.imp)):
+        for imp in range(1, len(self.imp) - 1):
             if len(missing[imp]) > 0:
                 self.add_error(missing[imp], 'missing_keys', vpath, imp)
-
-        if len(forbidden) > 0:
-            self.add_error(forbidden, 'forbidden_keys', vpath, 1)
 
         for eset in ((unused, 'unused_keys'),(unknown, 'unknown_keys')):
             if len(eset[0]) > 0:
@@ -862,84 +1012,108 @@ class test_JSON():
                 spath.append(-index-1)
                 self.add_error(self.test_typelist(typelist, testval[-index-1], spath), 'type_errors', spath,1)
 
-    def report_key_errors(self, dset):
-        # Report on found inconsistancies
-        if len(self.dkey_errors[dset]['missing']) > 0:
-            self.log('The following %s main-keys are not set:\n' % dset)
-            for dkey in self.dkey_errors[dset]['missing']:
-                if is_data_value([dset, dkey,"default"], self.keydef):
-                    self.log('  "%s": It will default to: %s\n' % \
-                        (dkey.ljust(25), data_value([dset, dkey,"default"], self.keydef)))
+    def report_errors(self):
+        def type_err_string(ttype, tvals):
+            if ttype ==1:
+                return 'Wrong value type, should be: "%s"' % tvals['type']
 
-                else:
-                    self.log('  "%s": Without default\n' % dkey.ljust(25))
+            elif ttype ==2:
+                return 'Value not in "%s"' % self.lookup_lists[tvals['type']]
 
-        else:
-            self.log('All %s keys are present.\n' % dset)
+            elif ttype == 3:
+                return 'Value not of length: %s' % tvals['length']
 
-        if len(self.dkey_errors[dset]['wrong_type']) > 0:
-            self.log('The following %s main-keys have a wrong value type:\n' % dset)
-            for dkey, dtype in self.dkey_errors[dset]['wrong_type'].items():
-                self.log('  "%s": Must be of type: %s\n' % (dkey.ljust(25), dtype))
+            elif ttype == 4:
+                return 'Value does not match a: "%s"' % tvals['type'][7:]
 
-        else:
-            self.log('All set %s keys are of the right type.\n' % dset)
+            if ttype == 8:
+                return 'Key %s should be of type: "%s"' % (tvals['value'], tvals['type'])
 
-        if len(self.dkey_errors[dset]['errors']) > 0:
-            self.log('The following (potential) errors were found in %s main-keys:\n' % dset)
-            for key, v in self.dkey_errors[dset]['errors'].items()[:]:
-                del(self.dkey_errors[dset]['errors'][key])
-                v.sort(key=lambda err: (err['error'], err['path']))
-                act_err = 0
-                for err in v:
-                    if err['error'] > act_err:
-                        act_err = err['error']
-                        if act_err == 1:
-                            self.log('  Missing sub-keys in main-key "%s":\n' % (key))
+            elif ttype == 16:
+                return 'Key %s not in "%s"' % (tvals['value'], self.lookup_lists[tvals['type']])
 
-                        elif act_err == 2:
-                            self.log('  Unrecognized sub-keys in main-key "%s":\n' % (key))
+        def header_string(imp):
+            if etype in(0, 1):
+                return 'The following %s\n' % (etext[etype] % (self.imp[imp]))
 
-                        elif act_err == 3:
-                            self.log('  Wrong value-types in main-key "%s":\n' % (key))
+            if etype in (2, 3):
+                return 'The following %s\n' % (etext[etype])
 
-                        elif act_err == 4:
-                            self.log('  Wrong value in main-key "%s":\n' % (key))
+            if etype == 4:
+                return 'From the following "either" selections the first is selected%s:\n' % (etext[etype+imp])
 
-                        elif act_err == 5:
-                            self.log('  Wrong sub-key-types in main-key "%s":\n' % (key))
+        def format_err(val, imp):
+            if len(val) == 0:
+                return
 
-                        elif act_err == 6:
-                            self.log('  Wrong string or list length in main-key "%s":\n' % (key))
+            self.report(header_string(imp))
+            klist = val.keys()
+            klist.sort()
+            for k in klist:
+                self.report('  at path: %s\n' % k)
+                if etype in (1, 2, 3):
+                    val[k].sort()
+                    for key in val[k]:
+                        self.report('    %s\n' % key)
+
+                if etype == 0:
+                    for e in (1, 2, 3, 4, 8, 16):
+                        if e in val[k].keys() and len(val[k][e]) > 0:
+                            for vt in val[k][e]:
+                                self.report('    %s\n' % (type_err_string(e, vt)))
+
+                if etype == 4:
+                    self.report('    %s\n' % val[k]['text'])
+                    for item in val[k]['list']:
+                        self.report('    Option %s:\n' % (item[0]))
+                        if len(item[1]) == 0:
+                            self.report('      With no missing keys\n')
 
                         else:
-                            break
+                            kstr = '      With the required '
+                            for k in item[1]:
+                                kstr = '%s"%s", ' % (kstr, k)
 
-                    if act_err == 1:
-                        self.log('    %s"%s" is not set in "%s". It will default to "%s"\n' % \
-                            (err['importance'].capitalize(), err['value'], err['path'], err['default']))
+                            self.report('%s key(s) missing ' % (kstr[:-2]))
 
-                    elif act_err == 2:
-                        self.log('    key-value "%s" in %s is not recognized.\n' % (err['value'], err['path']))
+                        if len(item[2]) == 0:
+                            self.report('      With no forbidden keys\n')
 
-                    elif act_err == 3:
-                        self.log('    %svalue in %s should be of type: "%s".\n' % \
-                            (err['importance'].capitalize(), err['path'], err['type']))
+                        else:
+                            kstr = '      With the forbidden '
+                            for k in item[2]:
+                                kstr = '%s"%s", ' % (kstr, k)
 
-                    elif act_err == 4:
-                        self.log('    value "%s" in %s should be one of %s.\n' % \
-                            (err['importance'].capitalize(), err['value'], err['path'], err['not-in']))
+                            self.report('%s key(s) present ' % (kstr[:-2]))
 
-                    elif act_err == 5:
-                        self.log('    %ssub-key in %s should be of type: "%s".\n' % \
-                            (err['importance'].capitalize(), err['path'], err['type']))
+                        if len(item[3]) == 0:
+                            self.report('      With no errors\n')
 
-                    elif act_err == 6:
-                        self.log('    %sList/String in %s should have length: %s.\n' % \
-                        (err['importance'].capitalize(), err['path'], err['length']))
+                        else:
+                            self.report('      With some errors\n')
 
-                    else:
-                        break
+        etext = ('errors in %s keys are encountered',
+                '%s keys are not set',
+                'known keys are found that will not be used',
+                'keys are not recognized',
+                '',
+                ', that give errors')
+
+        if len(self.errors[self.imp[1]]) == 0:
+            self.log('And no serieus errors were found!\n\n')
+
+        else:
+            self.log('And some serious errors were encountered:\n\n')
+
+        for etype in (1, 4, 0):
+            format_err(data_value([self.imp[1], self.etypes[etype]], self.errors, dict), 1)
+
+        for etype in (0, 1):
+            for imp in (2, 3):
+                format_err(data_value([self.imp[imp], self.etypes[etype]], self.errors, dict), imp)
+
+        for etype in (2, 3, 4):
+            format_err(data_value([self.imp[0], self.etypes[etype]], self.errors, dict), 0)
 
     def _open_file(self, file_name, mode = 'rb', encoding = None):
         """ Open a file and return a file handler if success """
@@ -947,12 +1121,12 @@ class test_JSON():
             encoding = self.encoding
 
         if 'r' in mode and not (os.path.isfile(file_name) and os.access(file_name, os.R_OK)):
-            self.log(u'File: "%s" not found or could not be accessed.\n' % (file_name, ))
+            self.log(u'File: "%s" not found or could not be accessed.\n' % (file_name.split('/')[-1], ))
             return None
 
         if ('a' in mode or 'w' in mode):
             if os.path.isfile(file_name) and not os.access(file_name, os.W_OK):
-                self.log(u'File: "%s" not found or could not be accessed.\n' % (file_name, ))
+                self.log(u'File: "%s" not found or could not be accessed.\n' % (file_name.split('/')[-1], ))
                 return None
 
         try:
@@ -963,9 +1137,9 @@ class test_JSON():
 
         except IOError as e:
             if e.errno == 2:
-                self.log(u'File: "%s" not found or could not be accessed.\n' % (file_name, ))
+                self.log(u'File: "%s" not found or could not be accessed.\n' % (file_name.split('/')[-1], ))
             else:
-                self.log('File: "%s": %s.\n' % (file_name, e.strerror))
+                self.log('File: "%s": %s.\n' % (file_name.split('/')[-1], e.strerror))
             return None
 
         return file_handler
@@ -983,9 +1157,11 @@ class test_JSON():
                         self.log('  Loaded "%s"\n' % local_name)
                         return json.load(fle)
 
+            except(ValueError):
+                self.log( '  %s\n' % e)
+
             except:
                 traceback.print_exc()
-                pass
 
         # We try to download unless the only_local_files flag is set
         if not self.only_local_files:
@@ -1022,6 +1198,10 @@ class test_JSON():
                 if fle != None:
                     return json.load(fle)
 
+            except(ValueError):
+                self.log( '  %s\n' % e)
+                return None
+
             except:
                 return None
 
@@ -1050,6 +1230,10 @@ class FetchURL(Thread):
 
             try:
                 self.result = url_request.json()
+
+            except(ValueError):
+                self.requester.log(u'Url %s does not return a valid json file\n' % (self.url, ))
+                self.requester.log( '  %s\n' % e)
 
             except:
                 self.requester.log(u'Url %s does not return a valid json file\n' % (self.url, ))
