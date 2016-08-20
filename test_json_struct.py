@@ -1,6 +1,8 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 
+'''test_json_struct is part of DataTreeGrab and can be used to test data_defs created for that module'''
+
 import json, io, sys, os, re, traceback
 import pytz, datetime, requests
 from threading import Thread
@@ -124,7 +126,7 @@ class test_JSON():
                 if not t[-1] == '\n':
                     t+= '\n'
 
-                sys.stderr.write(text.encode(self.encoding, 'replace'))
+                sys.stderr.write(t.encode(self.encoding, 'replace'))
 
     def report(self, text):
         if not isinstance(text, list):
@@ -589,8 +591,7 @@ class test_JSON():
         elif data_value('type', tstruct, str) == 'list':
             self.test_list(tstruct, self.testfile)
 
-        self.report_errors()
-        return 0
+        return(self.report_errors())
 
     def test_struct(self, struct_name, testval):
         self.init_struct(struct_name, testval)
@@ -1101,9 +1102,11 @@ class test_JSON():
 
         if len(self.errors[self.imp[1]]) == 0:
             self.log('And no serieus errors were found!\n\n')
+            retval = 0
 
         else:
             self.log('And some serious errors were encountered:\n\n')
+            retval = 4
 
         for etype in (1, 4, 0):
             format_err(data_value([self.imp[1], self.etypes[etype]], self.errors, dict), 1)
@@ -1114,6 +1117,8 @@ class test_JSON():
 
         for etype in (2, 3, 4):
             format_err(data_value([self.imp[0], self.etypes[etype]], self.errors, dict), 0)
+
+        return retval
 
     def _open_file(self, file_name, mode = 'rb', encoding = None):
         """ Open a file and return a file handler if success """
