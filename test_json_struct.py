@@ -7,7 +7,7 @@ import json, io, sys, os, re, traceback
 import pytz, datetime, requests
 from threading import Thread
 from copy import copy, deepcopy
-from DataTreeGrab import is_data_value, data_value
+from DataTreeGrab import is_data_value, data_value, version
 
 #json_struct syntax
 #
@@ -46,14 +46,15 @@ from DataTreeGrab import is_data_value, data_value
 #               keyword: a list of keyword to follow to the value
 #               type: either: integer, string or boolean
 #               default: the value to use if the the value is not found
-#       report: text to add in a report to describe the selection critiria
-#   Any value in the below types dict
+#       report: text to add in a report to describe the selection critiria on failure
+#   Any value in the below types dict or if type = list a types dict
 #
 #   types: list of (types or type-lists) or
 #       list of dicts with
 #           type (implied): type or type-list
 #           length: (for string, list or dict)
 #           if a list (potential root for a struct):
+#               If the root of a struct a types keyword is expected to contain details
 #               items: positional type(list) like 'types'
 #               reverse_items: reversed positional type(list) like 'types'
 #           if a dict (potential root for a struct):
@@ -66,6 +67,7 @@ from DataTreeGrab import is_data_value, data_value
 #                   with extra keys:
 #                       reference_key: a key value defined in reference_values
 #                       value: a list of values to compare with
+#                       regex: a regex string to test against or a string to be present in the value
 #                       true: status if in value list defaulting to the false status
 #                       false: status if not in value list defaulting to 3
 #                           1: required (test and report on absence, used in selecting an either sub-struct)
@@ -93,6 +95,19 @@ from DataTreeGrab import is_data_value, data_value
 # 4: Invalid struct type
 # 8: Wrong key-Type
 # 16 key value not in allowed list
+#
+# Report Levels (default is -1 or all):
+#   1: Missing required keys
+#   2: Errors on required values and on either selection
+#   4: Errors on not required keys
+#   8: Missing sugested keys without a default
+#  16: Missing sugested keys
+#  32: Missing optional keys without a default
+#  64: Missing optional keys
+# 128: Unused keys
+# 256: Unknown keys
+# 512: Report on either selection (without errors)
+
 
 class test_JSON():
     def __init__(self, encoding = 'utf-8', struct_file = None, struct_path = None):
@@ -195,6 +210,7 @@ class test_JSON():
             importance = 0
 
         if not etype in self.etypes:
+            return
             etype = "other"
 
         if etype == 'type_errors':
@@ -207,11 +223,14 @@ class test_JSON():
 
                 if e['error'] & 7:
                     ve = e['error'] & 7
-                    if ve in (1, 2, 4):
+                    if ve in (1, 2):
                         append_error(importance, etype, e['path'], {'type':e['type'], 'value': deepcopy(e['value'])}, ve)
 
                     if ve == 3:
                         append_error(importance, etype, e['path'], {'length':e['length'], 'value': deepcopy(e['value'])}, ve)
+
+                    if ve == 4:
+                        append_error(importance, etype, e['path'], {'type':e['type'], 'report': e['report']}, ve)
 
                 if e['error'] & 8:
                     # Key type error
@@ -266,6 +285,14 @@ class test_JSON():
             self.struct_tree = None
             return
 
+        if is_data_value("DTG-version", keyfiles, list):
+            key_version = tuple(data_value("DTG-version", keyfiles, list, [2,0,0]))
+            DTG_version = version()[1:4]
+            if DTG_version < key_version:
+                self.log('\nThe struct-files are intended for version %d.%d.%d,\n' % key_version)
+                self.log('  but you have installed %s version %d.%d.%d\n' % version()[:4])
+                self.log('  The test might not be accurate! Consider upgrading.\n\n')
+
         for item in data_value('files', keyfiles, list):
             for k, v in item.items():
                 fle = self._get_json_data(k, data_value("version", v, int), struct_path)
@@ -280,19 +307,42 @@ class test_JSON():
                         self.struct_tree[s] = fle[s]
 
     def init_struct(self,struct_name, testval):
+        if not data_value([struct_name, "initialized"], self.struct_tree, bool, False):
+            include_list = data_value([struct_name, "include"], self.struct_tree)
+            if isinstance(include_list, (str,unicode)):
+                include_list = [include_list]
+
+            if isinstance(include_list, list):
+                for include_struct in include_list:
+                    if include_struct in self.struct_list:
+                        self.init_struct(include_struct, testval)
+                        self.struct_tree[struct_name] = self.merge_structs(struct_name, include_struct)
+
+                if "include" in self.struct_tree[struct_name].keys():
+                    del self.struct_tree[struct_name]["include"]
+
+            if isinstance(self.struct_tree[struct_name], dict):
+                self.struct_tree[struct_name]["initialized"] = True
+
+            if data_value([struct_name, "type"], self.struct_tree, str) in self.struct_list:
+                # This should be an include!
+                include_struct = data_value([struct_name, "type"], self.struct_tree, str)
+                self.init_struct(include_struct, testval)
+                self.struct_tree[struct_name] = self.merge_structs(struct_name, include_struct)
+
+            if is_data_value([struct_name, "type"], self.struct_tree, list):
+                typelist = data_value([struct_name, "type"], self.struct_tree, list)
+                for index in range(len(typelist)):
+                    if typelist[index] in self.struct_list:
+                        # We have to create  a sub-struct
+                        include_struct = typelist[index]
+                        sub_struct = '%s-%s' % (struct_name, index)
+                        self.init_struct(include_struct, testval)
+                        self.struct_tree[sub_struct] = self.merge_structs(struct_name, include_struct)
+                        self.struct_list.append(sub_struct)
+                        typelist[index] = sub_struct
+
         self.load_lookup_lists(struct_name, testval)
-        include_list = data_value([struct_name, "include"], self.struct_tree)
-        if isinstance(include_list, (str,unicode)):
-            include_list = [include_list]
-
-        if isinstance(include_list, list):
-            for include_struct in include_list:
-                if include_struct in self.struct_list:
-                    self.init_struct(include_struct, testval)
-                    self.struct_tree[struct_name] = self.merge_structs(self.struct_tree[struct_name], self.struct_tree[include_struct])
-
-            if "include" in self.struct_tree[struct_name].keys():
-                del self.struct_tree[struct_name]["include"]
 
     def load_lookup_lists(self, struct_name, testval):
         # Load reference lists from the grabber_datafile
@@ -378,8 +428,10 @@ class test_JSON():
 
         self.add_extra_lookup_lists(struct_name)
 
-    def merge_structs(self, struct1, struct2):
+    def merge_structs(self, struct_name, include_struct):
         # struct2 is given through the "include" keyword in struct1
+        struct1 = self.struct_tree[struct_name]
+        struct2 = self.struct_tree[include_struct]
         def key_list(sstruct):
             klist = []
             for g in range(1, len(self.imp)):
@@ -415,14 +467,22 @@ class test_JSON():
             if is_data_value('either', sstruct1, list):
                 for item in data_value(['either'], sstruct1, list):
                     addedlist.extend(key_list(item))
+
                 addedlist = list(set(addedlist))
                 mstruct['either'] = deepcopy(sstruct1['either'])
+                if is_data_value('report', sstruct1, str):
+                    mstruct['report'] = sstruct1['report']
+                elif is_data_value('report', sstruct2, str):
+                    mstruct['report'] = sstruct2['report']
 
             elif is_data_value('either', sstruct2, list):
                 for item in data_value(['either'], sstruct2, list):
                     addedlist.extend(key_list(item))
+
                 addedlist = list(set(addedlist))
                 mstruct['either'] = deepcopy(sstruct2['either'])
+                if is_data_value('report', sstruct2, str):
+                    mstruct['report'] = sstruct2['report']
 
             for imp in range(1, len(self.imp)):
                 g = self.imp[imp]
@@ -488,12 +548,11 @@ class test_JSON():
             elif is_data_value('base-type', struct1, str):
                 mstruct['base-type'] = struct1['base-type']
 
-            for k in (('items', list), ('reverse_items', list), ('length', int)):
-                if is_data_value(k[0], sstruct1, k[1], True):
-                    mstruct[k[0]] = deepcopy(sstruct1[k[0]])
+            if is_data_value('types', struct1, list):
+                mstruct['types'] = deepcopy(struct1['types'])
 
-                elif is_data_value(k[0], sstruct2, k[1], True):
-                    mstruct[k[0]] = deepcopy(sstruct2[k[0]])
+            elif is_data_value('types', struct2, list):
+                mstruct['types'] = deepcopy(struct2['types'])
 
             return mstruct
 
@@ -503,12 +562,12 @@ class test_JSON():
         if data_value('type', struct2) in ('dict', 'numbered dict'):
             return merge_dict(struct1, struct2, data_value('type', struct2))
 
-        if data_value('type', struct2)== 'list':
+        if data_value('type', struct2) == 'list' or is_data_value('types',struc1, list):
             return merge_list(struct1, struct2, data_value('type', struct2))
 
         return deepcopy(struct2)
 
-    def test_file(self, file_name, struct_name = None):
+    def test_file(self, file_name, struct_name = None, report_level = -1):
         self.file_struct = None
         j_file = self._open_file(file_name, 'r')
         if j_file == None:
@@ -589,11 +648,12 @@ class test_JSON():
             self.test_dict(tstruct, self.testfile)
 
         elif data_value('type', tstruct, str) == 'list':
-            self.test_list(tstruct, self.testfile)
+            if is_data_value('types', tstruct, list):
+                self.test_typelist(data_value('types', tstruct, list), self.testfile)
 
-        return(self.report_errors())
+        return(self.report_errors(report_level))
 
-    def test_struct(self, struct_name, testval):
+    def test_struct_type(self, struct_name, testval):
         self.init_struct(struct_name, testval)
         sstruct = self.struct_tree[struct_name]
         if self.test_type(sstruct, testval) > 0:
@@ -640,6 +700,7 @@ class test_JSON():
                             'type': dtype,
                             'value': val,
                             'length':data_value("length", dtypes, int, 0),
+                            'report':data_value([dtype,"report"], self.struct_tree, str),
                             'keyerrs':keyerrs}
             return err
 
@@ -717,6 +778,11 @@ class test_JSON():
                 # Wrong type
                 return set_error(1)
 
+        elif dtype == 'float':
+            if not isinstance(val, (float, int)):
+                # Wrong type
+                return set_error(1)
+
         elif dtype == 'string':
             if not isinstance(val, (str, unicode)):
                 # Wrong type
@@ -747,6 +813,14 @@ class test_JSON():
                 # Wrong type
                 return set_error(1)
 
+        elif dtype == 'date':
+            try:
+                sd = datetime.datetime.strptime(val, '%Y%m%d')
+
+            except:
+                # Wrong type
+                return set_error(1)
+
         elif dtype == 'none':
             if val != None:
                 # Wrong type
@@ -757,16 +831,13 @@ class test_JSON():
                 # Wrong type
                 return set_error(1)
 
-        elif dtype == 'date':
-            pass
-
         elif dtype in self.lookup_lists.keys():
             if not val in self.lookup_lists[dtype]:
                 # Wrong type
                 return set_error(2)
 
         elif dtype in self.struct_list:
-             if not self.test_struct(dtype, val):
+             if not self.test_struct_type(dtype, val):
                 return set_error(4)
 
         else:
@@ -804,13 +875,7 @@ class test_JSON():
             vr = self.trep.copy()
             if vr['type'] in self.struct_list:
                 # Jump to the struct
-                struct = self.struct_tree[vr['type']]
-                stype = data_value('type', struct, str)
-                if stype in ('dict', 'numbered dict'):
-                    self.test_dict(struct, testval, vpath)
-
-                elif stype == 'list':
-                    self.test_list(struct, testval, vpath)
+                errlist.extend(self.test_struct(vr['type'], testval, vpath))
 
             if vr['type'] in ('dict', 'numbered dict'):
                 self.test_dict(typelist[0], testval, vpath)
@@ -832,6 +897,31 @@ class test_JSON():
                         spath = [] if vpath == None else copy(vpath)
                         spath.append(item)
                         errlist.extend(self.test_typelist( typelist[1:], testval[item], spath))
+
+        return errlist
+
+    def test_struct(self, struct_name, testval, vpath):
+        errlist = []
+        struct = self.struct_tree[struct_name]
+        stype = data_value('type', struct)
+        if isinstance(stype, list):
+            if self.test_type(stype, testval) > 0:
+                errrep = self.trep.copy()
+                errrep['path'] = vpath
+                errlist.append(errrep)
+                return errlist
+
+            else:
+                stype = self.trep['type']
+
+        if stype in self.struct_list:
+            stype = self.test_struct(stype, testval, vpath)
+
+        if stype in ('dict', 'numbered dict'):
+            self.test_dict(struct, testval, vpath)
+
+        elif stype == 'list' and is_data_value('types', struct, list):
+            errlist.extend(self.test_typelist(data_value('types', struct, list), testval, vpath))
 
         return errlist
 
@@ -923,7 +1013,12 @@ class test_JSON():
             for dkey in data_value([dset], teststruct, dict).keys():
                 # test on the presence of defined keys
                 if not dkey in testval.keys():
-                    missing[imp].append(dkey)
+                    if is_data_value([dset, dkey, 'default'], teststruct):
+                        missing[imp].append((dkey, data_value([dset, dkey, 'default'], teststruct)))
+
+                    else:
+                        missing[imp].append((dkey, None))
+
                     continue
 
                 # get the type definition list for this key
@@ -934,14 +1029,17 @@ class test_JSON():
 
         for dkey in data_value(['conditional'], teststruct, dict).keys():
             revkey = data_value(['conditional', dkey, 'reference_key'], teststruct, str)
-            revval = data_value(['conditional', dkey, 'value'], teststruct, list)
             impfalse = data_value(['conditional', dkey, 'false'], teststruct, int, 3)
             imptrue = data_value(['conditional', dkey, 'true'], teststruct, int, impfalse)
-            if revkey in self.reference_values.keys() and self.reference_values[revkey] in revval:
-                imp = imptrue
+            imp = impfalse
+            if revkey in self.reference_values.keys():
+                if is_data_value(['conditional', dkey, 'value'], teststruct, list) \
+                    and self.reference_values[revkey] in teststruct['conditional'][dkey]['value']:
+                        imp = imptrue
 
-            else:
-                imp = impfalse
+                elif is_data_value(['conditional', dkey, 'regex'], teststruct, str):
+                    if re.search(teststruct['conditional'][dkey]['regex'], self.reference_values[revkey]):
+                        imp = imptrue
 
             if imp in range(1, len(self.imp) - 1):
                 known_keys.append(dkey)
@@ -951,7 +1049,12 @@ class test_JSON():
                     if not imp in missing.keys():
                         missing[imp] = []
 
-                    missing[imp].append(dkey)
+                    if is_data_value([dset, dkey, 'default'], teststruct):
+                        missing[imp].append((dkey, data_value([dset, dkey, 'default'], teststruct)))
+
+                    else:
+                        missing[imp].append((dkey, None))
+
                     continue
 
                 # get the type definition list for this key
@@ -1013,19 +1116,34 @@ class test_JSON():
                 spath.append(-index-1)
                 self.add_error(self.test_typelist(typelist, testval[-index-1], spath), 'type_errors', spath,1)
 
-    def report_errors(self):
+    def report_errors(self, report_level = -1):
         def type_err_string(ttype, tvals):
             if ttype ==1:
-                return 'Wrong value type, should be: "%s"' % tvals['type']
+                if isinstance(tvals['value'], (dict, list)):
+                    return 'Wrong value type, should be: "%s"' % tvals['type']
+
+                elif isinstance(tvals['value'], (str, unicode)):
+                    return 'Value "%s" is not of type: "%s"' % (tvals['value'],tvals['type'])
+
+                else:
+                    return 'Value %s is not of type: "%s"' % (tvals['value'],tvals['type'])
 
             elif ttype ==2:
-                return 'Value not in "%s"' % self.lookup_lists[tvals['type']]
+                if isinstance(tvals['value'], (str, unicode)):
+                    return 'Value "%s" not in "%s"' % (tvals['value'],self.lookup_lists[tvals['type']])
+
+                else:
+                    return 'Value %s not in "%s"' % (tvals['value'],self.lookup_lists[tvals['type']])
 
             elif ttype == 3:
                 return 'Value not of length: %s' % tvals['length']
 
             elif ttype == 4:
-                return 'Value does not match a: "%s"' % tvals['type'][7:]
+                if is_data_value('report', tvals, str, True):
+                    return 'Value does not match a: "%s"\n      %s' % (tvals['type'][7:], tvals['report'])
+
+                else:
+                    return 'Value does not match a: "%s"' % tvals['type'][7:]
 
             if ttype == 8:
                 return 'Key %s should be of type: "%s"' % (tvals['value'], tvals['type'])
@@ -1033,72 +1151,99 @@ class test_JSON():
             elif ttype == 16:
                 return 'Key %s not in "%s"' % (tvals['value'], self.lookup_lists[tvals['type']])
 
-        def header_string(imp):
+        def header_string(imp, etype, with_default):
             if etype in(0, 1):
-                return 'The following %s\n' % (etext[etype] % (self.imp[imp]))
+                if with_default:
+                    return 'The following %s, but have a default\n' % (etext[etype] % (self.imp[imp]))
+
+                else:
+                    return 'The following %s\n' % (etext[etype] % (self.imp[imp]))
 
             if etype in (2, 3):
-                return 'The following %s\n' % (etext[etype])
+                if with_default:
+                    return 'The following %s\n' % (etext[etype])
 
             if etype == 4:
                 return 'From the following "either" selections the first is selected%s:\n' % (etext[etype+imp])
 
-        def format_err(val, imp):
+        def format_err(imp, etype, with_default = False):
+            repstring = ''
+            val = data_value([self.imp[imp], self.etypes[etype]], self.errors, dict)
             if len(val) == 0:
                 return
 
-            self.report(header_string(imp))
             klist = val.keys()
             klist.sort()
             for k in klist:
-                self.report('  at path: %s\n' % k)
-                if etype in (1, 2, 3):
-                    val[k].sort()
-                    for key in val[k]:
-                        self.report('    %s\n' % key)
-
+                substring = ''
                 if etype == 0:
                     for e in (1, 2, 3, 4, 8, 16):
                         if e in val[k].keys() and len(val[k][e]) > 0:
                             for vt in val[k][e]:
-                                self.report('    %s\n' % (type_err_string(e, vt)))
+                                substring += '    %s\n' % (type_err_string(e, vt))
 
-                if etype == 4:
-                    self.report('    %s\n' % val[k]['text'])
+                elif etype == 1:
+                    val[k].sort()
+                    for key in val[k]:
+                        if key[1] == None:
+                            if imp ==1 or not with_default:
+                                substring += '    "%s"\n' % key[0]
+
+                        elif isinstance(key[1], (str, unicode)):
+                            if imp ==1 or with_default:
+                                substring += '    "%s"  defaulting to: "%s"\n' % (key[0], key[1])
+
+                        elif imp ==1 or with_default:
+                            substring += '    "%s"  defaulting to: %s\n' % (key[0], key[1])
+
+                elif etype in (2, 3):
+                    val[k].sort()
+                    for key in val[k]:
+                        substring += '    "%s"\n' % key
+
+                elif etype == 4:
+                    substring += '    %s\n' % val[k]['text']
                     for item in val[k]['list']:
-                        self.report('    Option %s:\n' % (item[0]))
+                        substring += '    Option %s:\n' % (item[0])
                         if len(item[1]) == 0:
-                            self.report('      With no missing keys\n')
+                            substring += '      With no missing keys\n'
 
                         else:
                             kstr = '      With the required '
                             for k in item[1]:
                                 kstr = '%s"%s", ' % (kstr, k)
 
-                            self.report('%s key(s) missing ' % (kstr[:-2]))
+                            substring += '%s key(s) missing ' % (kstr[:-2])
 
                         if len(item[2]) == 0:
-                            self.report('      With no forbidden keys\n')
+                            substring += '      With no forbidden keys\n'
 
                         else:
                             kstr = '      With the forbidden '
                             for k in item[2]:
                                 kstr = '%s"%s", ' % (kstr, k)
 
-                            self.report('%s key(s) present ' % (kstr[:-2]))
+                            substring += '%s key(s) present ' % (kstr[:-2])
 
                         if len(item[3]) == 0:
-                            self.report('      With no errors\n')
+                            substring += '      With no errors\n'
 
                         else:
-                            self.report('      With some errors\n')
+                            substring += '      With some errors\n'
+
+                if substring != '':
+                    repstring += '  at path: %s\n%s' % (k, substring)
+
+            if repstring != '':
+                self.report(header_string(imp, etype, with_default))
+                self.report(repstring)
 
         etext = ('errors in %s keys are encountered',
                 '%s keys are not set',
                 'known keys are found that will not be used',
                 'keys are not recognized',
-                '',
-                ', that give errors')
+                ' without errors',
+                ' with some errors')
 
         if len(self.errors[self.imp[1]]) == 0:
             self.log('And no serieus errors were found!\n\n')
@@ -1108,15 +1253,37 @@ class test_JSON():
             self.log('And some serious errors were encountered:\n\n')
             retval = 4
 
-        for etype in (1, 4, 0):
-            format_err(data_value([self.imp[1], self.etypes[etype]], self.errors, dict), 1)
+        if report_level & 1:
+            format_err(imp = 1, etype = 1)
 
-        for etype in (0, 1):
+        if report_level & 2:
+            for etype in (4, 0):
+                format_err(imp = 1, etype = etype)
+
+        if report_level & 4:
             for imp in (2, 3):
-                format_err(data_value([self.imp[imp], self.etypes[etype]], self.errors, dict), imp)
+                format_err(imp = imp, etype = 0)
 
-        for etype in (2, 3, 4):
-            format_err(data_value([self.imp[0], self.etypes[etype]], self.errors, dict), 0)
+        if report_level & 8:
+            format_err(imp = 2, etype = 1)
+
+        if report_level & 32:
+            format_err(imp = 3, etype = 1)
+
+        if report_level & 16:
+            format_err(imp = 2, etype = 1, with_default = True)
+
+        if report_level & 64:
+            format_err(imp = 3, etype = 1, with_default = True)
+
+        if report_level & 128:
+            format_err(imp = 0, etype = 2)
+
+        if report_level & 256:
+            format_err(imp = 0, etype = 3)
+
+        if report_level & 512:
+            format_err(imp = 0, etype = 4)
 
         return retval
 
@@ -1162,7 +1329,7 @@ class test_JSON():
                         self.log('  Loaded "%s"\n' % local_name)
                         return json.load(fle)
 
-            except(ValueError):
+            except(ValueError) as e:
                 self.log( '  %s\n' % e)
 
             except:
