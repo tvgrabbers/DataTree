@@ -421,6 +421,7 @@ class DATAnode():
         if self.match_node(node_def = d_def[0], link_values=link_values, last_node_def = True) == None:
             # It's not a child definition
             if len(d_def) == 1:
+                # It's the last node_def
                 if self.dtree.show_result:
                     self.dtree.print_text(u'    adding node %s; %s\n'.encode('utf-8', 'replace') % (self.print_node(), d_def[0]))
 
@@ -431,6 +432,7 @@ class DATAnode():
                     return [{nm:self}]
 
             else:
+                # We'll check the next node_def
                 if len(self.link_value) > 0:
                     for k, v in self.link_value.items():
                         link_values[k] = v
@@ -782,6 +784,10 @@ class HTMLnode(DATAnode):
             else:
                 return False
 
+        elif is_data_value('path', node_def):
+            if not last_node_def:
+                self.check_for_linkrequest(node_def)
+
         elif is_data_value('tag', node_def):
             if self.get_value(node_def["tag"], link_values, 'tag', 'lower') in (None, self.tag.lower()):
                 # The tag matches
@@ -822,7 +828,6 @@ class HTMLnode(DATAnode):
                 return False
 
         if is_data_value('attrs', node_def, (dict, list)):
-        #~ if is_data_value('attrs', node_def):
             ck = data_value('attrs', node_def)
             if not is_data_value('attrs', node_def, list):
                 ck = [ck]
@@ -832,24 +837,13 @@ class HTMLnode(DATAnode):
                     continue
 
                 for a, v in cd.items():
-                    notv = False
                     if is_data_value('not', v, list):
                         # There is a negative attrib match requested
-                        notv = True
                         if not self.is_attribute(a):
                             # but the attribute is not there
                             continue
 
                         alist = self.get_value_list(data_value('not', v, list), link_values, 'attribute', 'str')
-
-                    else:
-                        if not self.is_attribute(a):
-                            # but the attribute is not there
-                            return False
-
-                        alist = self.get_value_list(v, link_values, 'attribute', 'str')
-
-                    if notv:
                         if len(alist) == 0:
                             # No values to exclude
                             continue
@@ -859,6 +853,11 @@ class HTMLnode(DATAnode):
                             return False
 
                     else:
+                        if not self.is_attribute(a):
+                            # but the attribute is not there
+                            return False
+
+                        alist = self.get_value_list(v, link_values, 'attribute', 'str')
                         if v == None or (len(alist) == 1 and alist[0] == None):
                             # All values are OK so continue
                             continue
@@ -1060,7 +1059,11 @@ class JSONnode(DATAnode):
         if not isinstance(link_values, dict):
             link_values ={}
 
-        if is_data_value('key', node_def):
+        if is_data_value('path', node_def):
+            if not last_node_def:
+                self.check_for_linkrequest(node_def)
+
+        elif is_data_value('key', node_def):
             if is_data_value(['key','link'], node_def, int):
                 kl = self.get_link(data_value(['key'], node_def, dict), link_values)
 
@@ -1093,10 +1096,6 @@ class JSONnode(DATAnode):
             if self.check_index(node_def, link_values) in (False, None):
                 return False
 
-        elif is_data_value('path', node_def):
-            if not last_node_def:
-                self.check_for_linkrequest(node_def)
-
         else:
             if last_node_def:
                 self.check_for_linkrequest(node_def)
@@ -1104,7 +1103,6 @@ class JSONnode(DATAnode):
             return None
 
         if is_data_value('childkeys', node_def, (dict, list)) or is_data_value('keys', node_def, dict):
-        #~ if is_data_value('childkeys', node_def) or is_data_value('keys', node_def, dict):
             ck = []
             if is_data_value('childkeys', node_def, dict):
                 ck = [node_def['childkeys']]
@@ -1120,24 +1118,13 @@ class JSONnode(DATAnode):
                     continue
 
                 for k, v in cd.items():
-                    notv = False
                     if is_data_value('not', v, list):
                         # There is a negative childkey match requested
-                        notv = True
                         if not  k in self.keys:
                             # but the childkey is not there
                             continue
 
                         alist = self.get_value_list(data_value('not', v, list), link_values, 'childkeys')
-
-                    else:
-                        if not  k in self.keys:
-                            # but the childkey is not there
-                            return False
-
-                        alist = self.get_value_list(v, link_values, 'childkeys')
-
-                    if notv:
                         if len(alist) == 0:
                             # No values to exclude
                             continue
@@ -1147,6 +1134,11 @@ class JSONnode(DATAnode):
                             return False
 
                     else:
+                        if not  k in self.keys:
+                            # but the childkey is not there
+                            return False
+
+                        alist = self.get_value_list(v, link_values, 'childkeys')
                         if v == None or (len(alist) == 1 and alist[0] == None):
                             # All values are OK so continue
                             continue
