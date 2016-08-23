@@ -453,93 +453,82 @@ class test_JSON():
 
             return None
 
-        def merge_dict(sstruct1, sstruct2, stype):
+        def merge_dict(stype):
             mstruct = {}
             addedlist = []
+            def merge_lookup(list_name):
+                mstruct[list_name] = copy(data_value(list_name, struct1, dict))
+                if is_data_value(list_name, struct2, dict):
+                    for k, v in struct2[list_name].items():
+                        if not k in mstruct[list_name].keys():
+                            mstruct[list_name][k] = v
+
+            def add_keys(sstruct):
+                for imp in range(1, len(self.imp)):
+                    g = self.imp[imp]
+                    for skey in data_value(g, sstruct, dict).keys():
+                        if skey in addedlist:
+                            continue
+
+                        addedlist.append(skey)
+                        if not g in mstruct.keys():
+                            mstruct[g] = {}
+
+                        mstruct[g][skey] = deepcopy(sstruct[g][skey])
+
+                for g in self.key_lists:
+                    for skey in data_value(g, sstruct, list):
+                        if skey in addedlist:
+                            continue
+
+                        addedlist.append(skey)
+                        if not g in mstruct.keys():
+                            mstruct[g] = []
+
+                        mstruct[g].append(skey)
+
             mstruct['type'] = stype
+            merge_lookup("lookup_lists")
+            merge_lookup("reference_values")
             if is_data_value('base-type', struct2, str):
                 mstruct['base-type'] = struct2['base-type']
 
             elif is_data_value('base-type', struct1, str):
                 mstruct['base-type'] = struct1['base-type']
 
-            # We only use an 'either' in sstruct2 if not present in sstruct1
-            if is_data_value('either', sstruct1, list):
-                for item in data_value(['either'], sstruct1, list):
+            # We only use an 'either' in struct2 if not present in struct1
+            if is_data_value('either', struct1, list):
+                for item in data_value(['either'], struct1, list):
                     addedlist.extend(key_list(item))
 
                 addedlist = list(set(addedlist))
-                mstruct['either'] = deepcopy(sstruct1['either'])
-                if is_data_value('report', sstruct1, str):
-                    mstruct['report'] = sstruct1['report']
-                elif is_data_value('report', sstruct2, str):
-                    mstruct['report'] = sstruct2['report']
+                mstruct['either'] = deepcopy(struct1['either'])
+                if is_data_value('report', struct1, str):
+                    mstruct['report'] = struct1['report']
+                elif is_data_value('report', struct2, str):
+                    mstruct['report'] = struct2['report']
 
-            elif is_data_value('either', sstruct2, list):
-                for item in data_value(['either'], sstruct2, list):
+            elif is_data_value('either', struct2, list):
+                for item in data_value(['either'], struct2, list):
                     addedlist.extend(key_list(item))
 
                 addedlist = list(set(addedlist))
-                mstruct['either'] = deepcopy(sstruct2['either'])
-                if is_data_value('report', sstruct2, str):
-                    mstruct['report'] = sstruct2['report']
+                mstruct['either'] = deepcopy(struct2['either'])
+                if is_data_value('report', struct2, str):
+                    mstruct['report'] = struct2['report']
 
-            for imp in range(1, len(self.imp)):
-                g = self.imp[imp]
-                for skey in data_value(g, sstruct1, dict).keys():
-                    if skey in addedlist:
-                        continue
-
-                    addedlist.append(skey)
-                    if not g in mstruct.keys():
-                        mstruct[g] = {}
-
-                    mstruct[g][skey] = deepcopy(sstruct1[g][skey])
-
-            for g in self.key_lists:
-                for skey in data_value(g, sstruct1, list):
-                    if skey in addedlist:
-                        continue
-
-                    addedlist.append(skey)
-                    if not g in mstruct.keys():
-                        mstruct[g] = []
-
-                    mstruct[g].append(skey)
-
-            for imp in range(1, len(self.imp)):
-                g = self.imp[imp]
-                for skey in data_value(g, sstruct2, dict).keys():
-                    if skey in addedlist:
-                        continue
-
-                    addedlist.append(skey)
-                    if not g in mstruct.keys():
-                        mstruct[g] = {}
-
-                    mstruct[g][skey] = deepcopy(sstruct2[g][skey])
-
-            for g in self.key_lists:
-                for skey in data_value(g, sstruct2, list):
-                    if skey in addedlist:
-                        continue
-
-                    addedlist.append(skey)
-                    if not g in mstruct.keys():
-                        mstruct[g] = []
-
-                    mstruct[g].append(skey)
-
+            add_keys(struct1)
+            add_keys(struct2)
             for k in (('keys', None), ('allowed', str), ('length', int)):
-                if is_data_value(k[0], sstruct1, k[1], True):
-                    mstruct[k[0]] = deepcopy(sstruct1[k[0]])
+                if is_data_value(k[0], struct1, k[1], True):
+                    mstruct[k[0]] = deepcopy(struct1[k[0]])
 
-                elif is_data_value(k[0], sstruct2, k[1], True):
-                    mstruct[k[0]] = deepcopy(sstruct2[k[0]])
+                elif is_data_value(k[0], struct2, k[1], True):
+                    mstruct[k[0]] = deepcopy(struct2[k[0]])
 
             return mstruct
 
-        def merge_list(sstruct1, sstruct2, stype):
+        def merge_list(stype):
             mstruct = {}
             mstruct['type'] = stype
             if is_data_value('base-type', struct2, str):
@@ -560,10 +549,10 @@ class test_JSON():
             return deepcopy(struct2)
 
         if data_value('type', struct2) in ('dict', 'numbered dict'):
-            return merge_dict(struct1, struct2, data_value('type', struct2))
+            return merge_dict(data_value('type', struct2))
 
         if data_value('type', struct2) == 'list' or is_data_value('types',struc1, list):
-            return merge_list(struct1, struct2, data_value('type', struct2))
+            return merge_list(data_value('type', struct2))
 
         return deepcopy(struct2)
 
@@ -1033,8 +1022,8 @@ class test_JSON():
             imptrue = data_value(['conditional', dkey, 'true'], teststruct, int, impfalse)
             imp = impfalse
             if revkey in self.reference_values.keys():
-                if is_data_value(['conditional', dkey, 'value'], teststruct, list) \
-                    and self.reference_values[revkey] in teststruct['conditional'][dkey]['value']:
+                if is_data_value(['conditional', dkey, 'value'], teststruct, list):
+                    if self.reference_values[revkey] in teststruct['conditional'][dkey]['value']:
                         imp = imptrue
 
                 elif is_data_value(['conditional', dkey, 'regex'], teststruct, str):
@@ -1160,8 +1149,7 @@ class test_JSON():
                     return 'The following %s\n' % (etext[etype] % (self.imp[imp]))
 
             if etype in (2, 3):
-                if with_default:
-                    return 'The following %s\n' % (etext[etype])
+                return 'The following %s\n' % (etext[etype])
 
             if etype == 4:
                 return 'From the following "either" selections the first is selected%s:\n' % (etext[etype+imp])
@@ -1213,7 +1201,7 @@ class test_JSON():
                             for k in item[1]:
                                 kstr = '%s"%s", ' % (kstr, k)
 
-                            substring += '%s key(s) missing ' % (kstr[:-2])
+                            substring += '%s key(s) missing\n' % (kstr[:-2])
 
                         if len(item[2]) == 0:
                             substring += '      With no forbidden keys\n'
@@ -1223,7 +1211,7 @@ class test_JSON():
                             for k in item[2]:
                                 kstr = '%s"%s", ' % (kstr, k)
 
-                            substring += '%s key(s) present ' % (kstr[:-2])
+                            substring += '%s key(s) present\n' % (kstr[:-2])
 
                         if len(item[3]) == 0:
                             substring += '      With no errors\n'
