@@ -57,6 +57,7 @@ from DataTreeGrab import is_data_value, data_value, version
 #               If the root of a struct a types keyword is expected to contain details
 #               items: positional type(list) like 'types'
 #               reverse_items: reversed positional type(list) like 'types'
+#               other_items: A type(list) for items not covered by either of the above
 #           if a dict (potential root for a struct):
 #               keys:  type or type-list
 #               either: list of alternatives
@@ -663,21 +664,16 @@ class test_JSON():
                     return False
 
             for k in data_value(['conditional'], sstruct, dict).keys():
-                revkey = data_value(['conditional', k, 'reference_key'], sstruct, str)
-                revval = data_value(['conditional', k, 'value'], sstruct, list)
-                impfalse = data_value(['conditional', k, 'false'], sstruct, int, 3)
-                imptrue = data_value(['conditional', k, 'true'], sstruct, int, impfalse)
-                if revkey in self.reference_values.keys() and self.reference_values[revkey] in revval:
-                    imp = imptrue
-
-                else:
-                    imp = impfalse
-
+                imp = self.conditional_imp(k, sstruct)
                 if imp == 1 and not k in testval.keys():
                     return False
 
                 if imp == -2 and k in testval.keys():
                     return False
+
+            if is_data_value('either', sstruct, list) and len(data_value('either', sstruct, list)) > 0:
+                testlist = self.test_either(sstruct, testval)
+                return bool(len(testlist[0][1]) == 0 and len(testlist[0][2]) == 0 and len(testlist[0][3]) == 0)
 
         #~ elif self.trep['type'] == 'list':
             #~ for index in range(len(data_value(['items'], sstruct, list))):
@@ -919,16 +915,45 @@ class test_JSON():
 
         return errlist
 
-    def test_dict(self, sstruct, testval, vpath=None):
-        teststruct = sstruct
-        if is_data_value('either', sstruct, list) and len(data_value('either', sstruct, list)) > 0:
-            testlist = []
-            for item in range(len(sstruct['either'])):
-                missing = []
-                wrongtype = {}
-                forbidden = []
-                # Test for required keys and their type
-                for k, v in data_value(['either', item, 'required'], sstruct, dict).items():
+    def conditional_imp(self, dkey, sstruct):
+        revkey = data_value(['conditional', dkey, 'reference_key'], sstruct, str)
+        impfalse = data_value(['conditional', dkey, 'false'], sstruct, int, 3)
+        imptrue = data_value(['conditional', dkey, 'true'], sstruct, int, impfalse)
+        if revkey in self.reference_values.keys():
+            if is_data_value(['conditional', dkey, 'value'], sstruct, list):
+                if self.reference_values[revkey] in sstruct['conditional'][dkey]['value']:
+                    return imptrue
+
+            elif is_data_value(['conditional', dkey, 'regex'], sstruct, str):
+                if re.search(sstruct['conditional'][dkey]['regex'], self.reference_values[revkey]):
+                    return imptrue
+
+        return impfalse
+
+    def test_either(self, sstruct, testval):
+        either_test = []
+        for item in range(len(sstruct['either'])):
+            missing = []
+            wrongtype = {}
+            forbidden = []
+            # Test for required keys and their type
+            for k, v in data_value(['either', item, 'required'], sstruct, dict).items():
+                if not k in testval.keys():
+                    missing.append(k)
+                    continue
+
+                typelist = data_value(["types", 0], v)
+                if self.test_type(typelist, testval[k]) > 0:
+                    wrongtype[k] = self.trep.copy()
+
+            # We test for the presence of forbidden keys
+            for k in data_value(['either', item, 'forbidden_keys'], sstruct, list):
+                if k in testval.keys():
+                    forbidden.append(k)
+
+            for k, v in data_value(['either', item, 'conditional'], sstruct, dict).items():
+                imp = self.conditional_imp(k, sstruct['either'][item])
+                if imp == 1:
                     if not k in testval.keys():
                         missing.append(k)
                         continue
@@ -937,38 +962,19 @@ class test_JSON():
                     if self.test_type(typelist, testval[k]) > 0:
                         wrongtype[k] = self.trep.copy()
 
-                # We test for the presence of forbidden keys
-                for k in data_value(['either', item, 'forbidden_keys'], sstruct, list):
-                    if k in testval.keys():
-                        forbidden.append(k)
+                if imp == -2 and k in testval.keys():
+                    forbidden.append(k)
 
-                for k, v in data_value(['either', item, 'conditional'], sstruct, dict).items():
-                    revkey = data_value(['either', item, 'conditional', k, 'reference_key'], sstruct, str)
-                    revval = data_value(['either', item, 'conditional', k, 'value'], sstruct, list)
-                    impfalse = data_value(['either', item, 'conditional', k, 'false'], sstruct, int, 3)
-                    imptrue = data_value(['either', item, 'conditional', k, 'true'], sstruct, int, impfalse)
-                    if revkey in self.reference_values.keys() and self.reference_values[revkey] in revval:
-                        imp = imptrue
+            either_test.append((item, missing, forbidden, wrongtype))
 
-                    else:
-                        imp = impfalse
+        # We Sort to get the most likely one ( with in order the least missing keys, the least forbidden keys and the least faulty keys)
+        either_test.sort(key=lambda k: (len(k[1]), len(k[2]), len(k[3])))
+        return either_test
 
-                    if imp == 1:
-                        if not k in testval.keys():
-                            missing.append(k)
-                            continue
-
-                        typelist = data_value(["types", 0], v)
-                        if self.test_type(typelist, testval[k]) > 0:
-                            wrongtype[k] = self.trep.copy()
-
-                    if imp == -2 and k in testval.keys():
-                        forbidden.append(k)
-
-                testlist.append((item, missing, forbidden, wrongtype))
-
-            # We Sort to get the most likely one ( with in order the least missing keys, the least forbidden keys and the least faulty keys)
-            testlist.sort(key=lambda k: (len(k[1]), len(k[2]), len(k[3])))
+    def test_dict(self, sstruct, testval, vpath=None):
+        teststruct = sstruct
+        if is_data_value('either', sstruct, list) and len(data_value('either', sstruct, list)) > 0:
+            testlist = self.test_either(sstruct, testval)
             text = data_value('report', sstruct, str)
             self.add_error({'text': text, 'list': testlist}, 'either_test', vpath)
 
@@ -1022,19 +1028,7 @@ class test_JSON():
                 self.add_error(self.test_typelist(typelist, testval[dkey], spath), 'type_errors', spath, imp)
 
         for dkey in data_value(['conditional'], teststruct, dict).keys():
-            revkey = data_value(['conditional', dkey, 'reference_key'], teststruct, str)
-            impfalse = data_value(['conditional', dkey, 'false'], teststruct, int, 3)
-            imptrue = data_value(['conditional', dkey, 'true'], teststruct, int, impfalse)
-            imp = impfalse
-            if revkey in self.reference_values.keys():
-                if is_data_value(['conditional', dkey, 'value'], teststruct, list):
-                    if self.reference_values[revkey] in teststruct['conditional'][dkey]['value']:
-                        imp = imptrue
-
-                elif is_data_value(['conditional', dkey, 'regex'], teststruct, str):
-                    if re.search(teststruct['conditional'][dkey]['regex'], self.reference_values[revkey]):
-                        imp = imptrue
-
+            imp = self.conditional_imp(dkey, teststruct)
             if imp in range(1, len(self.imp) - 1):
                 known_keys.append(dkey)
                 dset = self.imp[imp]
@@ -1096,21 +1090,33 @@ class test_JSON():
                 self.add_error(eset[0], eset[1],vpath)
 
     def test_list(self, sstruct, testval, vpath=None):
-        for index in range(len(data_value(['items'], sstruct, list))):
+        len_list =  len(testval)
+        len_start = len(data_value(['items'], sstruct, list))
+        len_end = len(data_value(['reverse_items'], sstruct, list))
+
+        for index in range(len_start):
             if index < len(testval):
                 typelist = data_value(['items', index], sstruct)
                 spath = [] if vpath == None else copy(vpath)
                 spath.append(index)
                 self.add_error(self.test_typelist(typelist, testval[index], spath), 'type_errors', spath,1)
 
-        for index in range(len(data_value(['reverse_items'], sstruct, list))):
+        for index in range(len_end):
             if index < len(testval):
                 typelist = data_value(['reverse_items', index], sstruct)
                 spath = [] if vpath == None else copy(vpath)
                 spath.append(-index-1)
                 self.add_error(self.test_typelist(typelist, testval[-index-1], spath), 'type_errors', spath,1)
 
+        if is_data_value('other_items', sstruct) and len_list > len_start + len_end:
+            typelist = data_value('other_items', sstruct)
+            for index in range(len_start, len_list - len_end):
+                spath = [] if vpath == None else copy(vpath)
+                spath.append(index)
+                self.add_error(self.test_typelist(typelist, testval[index], spath), 'type_errors', spath,1)
+
     def report_errors(self, report_level = -1):
+        #~ print self.errors
         def type_err_string(ttype, tvals):
             if ttype ==1:
                 if isinstance(tvals['value'], (dict, list)):
@@ -1203,8 +1209,8 @@ class test_JSON():
 
                         else:
                             kstr = '      With the required '
-                            for k in item[1]:
-                                kstr = '%s"%s", ' % (kstr, k)
+                            for key in item[1]:
+                                kstr = '%s"%s", ' % (kstr, key)
 
                             substring += '%s key(s) missing\n' % (kstr[:-2])
 
@@ -1213,8 +1219,8 @@ class test_JSON():
 
                         else:
                             kstr = '      With the forbidden '
-                            for k in item[2]:
-                                kstr = '%s"%s", ' % (kstr, k)
+                            for key in item[2]:
+                                kstr = '%s"%s", ' % (kstr, key)
 
                             substring += '%s key(s) present\n' % (kstr[:-2])
 
