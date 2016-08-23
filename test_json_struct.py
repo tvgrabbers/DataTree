@@ -463,6 +463,11 @@ class test_JSON():
                         if not k in mstruct[list_name].keys():
                             mstruct[list_name][k] = v
 
+                        elif data_value([list_name, k, "append"], mstruct, bool, False) \
+                            and is_data_value([list_name, k, "list"], mstruct, list) \
+                            and is_data_value([list_name, k, "list"], struct2, list):
+                                mstruct[list_name][k]["list"].extend(data_value([list_name, k, "list"], struct2, list))
+
             def add_keys(sstruct):
                 for imp in range(1, len(self.imp)):
                     g = self.imp[imp]
