@@ -165,6 +165,19 @@ def data_value(searchpath, searchtree, dtype = None, default = None):
     return searchtree
 # end data_value()
 
+def extend_list(base_list, extend_list, do_add_none = False):
+    if not isinstance(base_list, list):
+        base_list = [base_list]
+
+    if not isinstance(extend_list, list):
+        base_list.append(extend_list)
+
+    else:
+        base_list.extend(extend_list)
+
+    return base_list
+# end extend_list()
+
 class dtWarning(UserWarning):
     # The root of all DataTreeGrab warnings.
     name = 'General Warning'
@@ -379,6 +392,7 @@ class NULLnode():
 # end NULLnode
 
 class DATAnode():
+    """Basic DataNode functionality to be detailed in JSONnode and HTMLnode"""
     def __init__(self, dtree, parent = None):
         self.node_lock = RLock()
         with self.node_lock:
@@ -389,6 +403,7 @@ class DATAnode():
             self.child_index = 0
             self.level = 0
             self.link_value = {}
+            self.end_link_values = {}
 
             self.is_root = bool(self.parent == None)
             n = self
@@ -401,143 +416,99 @@ class DATAnode():
                 self.level = parent.level + 1
 
     def append_child(self, node):
+        # Used in initializing the Tree
         with self.node_lock:
             node.child_index = len(self.children)
             self.children.append(node)
 
     def get_children(self, path_def = None, link_values=None):
-        childs = []
+        """
+        The basic function to walk through the Tree
+        It first checks on the kind of node_def, extracting any name or link definition
+        And then follows the node_def to the defined nodes
+        """
+        nm = None
+        d_def = path_def if isinstance(path_def, list) else [path_def]
         if not isinstance(link_values, dict):
             link_values = {}
 
-        d_def = path_def if isinstance(path_def, list) else [path_def]
-        if len(d_def) == 0 or d_def[0] == None:
-            # It's not a child definition
-            if self.dtree.show_result:
-                self.dtree.print_text(u'    adding node %s\n'.encode('utf-8', 'replace') % (self.print_node()))
-            return [self]
-
-        nm = self.find_name(d_def[0])
-        if self.match_node(node_def = d_def[0], link_values=link_values, last_node_def = True) == None:
-            # It's not a child definition
-            if len(d_def) == 1:
-                # It's the last node_def
+        def match_node(node, only_check_validity = False):
+            # check through the HTML/JSON specific functions
+            nfound = node.match_node(node_def = d_def[0], link_values=link_values, only_check_validity = only_check_validity)
+            if not only_check_validity and nfound:
                 if self.dtree.show_result:
-                    self.dtree.print_text(u'    adding node %s; %s\n'.encode('utf-8', 'replace') % (self.print_node(), d_def[0]))
+                    self.dtree.print_text(u'  found node %s; %s\n'.encode('utf-8', 'replace') % (node.print_node(), d_def[0]))
 
-                if nm == None:
-                    return [self]
-
-                else:
-                    return [{nm:self}]
-
-            else:
-                # We'll check the next node_def
-                if len(self.link_value) > 0:
-                    for k, v in self.link_value.items():
+            if (not only_check_validity and nfound) or (only_check_validity and nfound == None):
+                # If we found a match or it is not a node definition
+                # We retrieve any found links
+                if len(node.link_value) > 0:
+                    for k, v in node.link_value.items():
                         link_values[k] = v
 
-                self.link_value = {}
-                childs = self.get_children(path_def = d_def[1:], link_values=link_values)
-                if nm == None:
-                    return childs
+                node.link_value = {}
 
-                else:
-                    return self.tag,{nm:childs}
+            return nfound
 
+        def found_nodes(fnodes):
+            # Return the found nodes, adding if defined a name
+            if fnodes == [self]:
+                # This is an end node, so we store link values to use on further searches
+                self.end_link_values = link_values
+                if self.dtree.show_result:
+                    self.dtree.print_text(u'    adding node %s\n'.encode('utf-8', 'replace') % (self.print_node()))
+
+            if nm == None:
+                return fnodes
+
+            else:
+                return {nm: fnodes}
+
+        if len(d_def) == 0 or d_def[0] == None:
+            # We seem to be past the end of the path_def so we consider ourselfs found
+            return found_nodes([self])
+
+        # Check on any name statement, to use in the return value
+        nm = self.find_name(d_def[0])
+        # Check if the node_def contains a child definition and if not collect any link request
+        if match_node(self, True) == None:
+            # It's not a child definition
+            if len(d_def) == 1:
+                # It's the final node_def, so we consider ourselfs found
+                return found_nodes([self])
+
+            else:
+                # We'll check the next node_def,
+                return found_nodes(self.get_children(path_def = d_def[1:], link_values=link_values))
+
+        # Is there a path statement
         elif is_data_value('path', d_def[0]):
             sel_val = d_def[0]['path']
             if sel_val == 'parent' and not self.is_root:
-                if self.parent.match_node(node_def = d_def[0], link_values=link_values):
-                    if self.dtree.show_result:
-                        self.dtree.print_text(u'  found node %s; %s\n'.encode('utf-8', 'replace') % (self.parent.print_node(), d_def[0]))
-                    self.parent.check_for_linkrequest(d_def[0])
-                    if len(self.parent.link_value) > 0:
-                        for k, v in self.parent.link_value.items():
-                            link_values[k] = v
-
-                    self.parent.link_value = {}
-                    childs = self.parent.get_children(path_def = d_def[1:], link_values=link_values)
-                    if nm == None:
-                        return childs
-
-                    else:
-                        return {nm:childs}
+                if match_node(self.parent):
+                    return found_nodes(self.parent.get_children(path_def = d_def[1:], link_values=link_values))
 
             elif sel_val == 'root':
-                if self.root.match_node(node_def = d_def[0], link_values=link_values):
-                    if self.dtree.show_result:
-                        self.dtree.print_text(u'  found node %s; %s\n'.encode('utf-8', 'replace') % (self.root.print_node(), d_def[0]))
-                    if len(self.root.link_value) > 0:
-                        for k, v in self.root.link_value.items():
-                            link_values[k] = v
-
-                    self.root.link_value = {}
-                    childs = self.root.get_children(path_def = d_def[1:], link_values=link_values)
-                    if nm == None:
-                        return childs
-
-                    else:
-                        return {nm:childs}
+                if match_node(self.root):
+                    return found_nodes(self.root.get_children(path_def = d_def[1:], link_values=link_values))
 
             elif sel_val == 'all':
+                childs = []
                 for item in self.children:
-                    if item.match_node(node_def = d_def[0], link_values=link_values):
-                        if self.dtree.show_result:
-                            self.dtree.print_text(u'  found node %s; %s\n'.encode('utf-8', 'replace') % (item.print_node(), d_def[0]))
-                        if len(item.link_value) > 0:
-                            for k, v in item.link_value.items():
-                                link_values[k] = v
+                    if match_node(item):
+                        childs = extend_list(childs, item.get_children(path_def = d_def[1:], link_values=link_values))
 
-                        item.link_value = {}
-                        jl = item.get_children(path_def = d_def[1:], link_values=link_values)
-                        if isinstance(jl, list):
-                            childs.extend(jl)
-
-                        elif jl != None:
-                            childs.append(jl)
-
-                if nm == None:
-                    return childs
-
-                else:
-                    return {nm:childs}
+                return found_nodes(childs)
 
         else:
+            childs = []
+            # We look for matching children
             for item in self.children:
-                # We look for matching children
-                if item.match_node(node_def = d_def[0], link_values=link_values):
+                if match_node(item):
                     # We found a matching child
-                    if self.dtree.show_result:
-                        self.dtree.print_text(u'  found node %s; %s\n'.encode('utf-8', 'replace') % (item.print_node(), d_def[0]))
-                    if len(item.link_value) > 0:
-                        for k, v in item.link_value.items():
-                            link_values[k] = v
+                    childs = extend_list(childs, item.get_children(path_def = d_def[1:], link_values=link_values))
 
-                    item.link_value = {}
-                    jl = item.get_children(path_def = d_def[1:], link_values=link_values)
-                    if isinstance(jl, list):
-                        childs.extend(jl)
-
-                    elif jl != None:
-                        childs.append(jl)
-
-            if nm == None:
-                return childs
-
-            else:
-                return {nm:childs}
-
-        #~ else:
-            #~ if self.dtree.show_result:
-                #~ self.dtree.print_text(u'    adding node %s; %s\n'.encode('utf-8', 'replace') % (self.print_node(), d_def[0]))
-            #~ return [self]
-
-        if nm == None:
-            return childs
-
-        else:
-            return {nm:childs}
+            return found_nodes(childs)
 
     def check_for_linkrequest(self, node_def):
         if is_data_value('link', node_def, int):
@@ -546,6 +517,7 @@ class DATAnode():
                 self.dtree.print_text(u'    saving link to node %s: %s\n      %s\n'.encode('utf-8', 'replace') % (self.find_value(node_def), self.print_node(), node_def))
 
     def get_link(self, sub_def, link_values, ltype = None):
+        # retrieve a stored link_value
         if not is_data_value(data_value(['link'], sub_def, int), link_values):
             self.dtree.warn('You requested a link, but link value %s is not stored!\n' % data_value(['link'], node_def, int), dtParseWarning, 2)
             return None
@@ -587,6 +559,7 @@ class DATAnode():
         return il
 
     def check_index(self, node_def, link_values):
+        # Check if this node satisfies  the requested index
         if is_data_value(['index','link'], node_def, int):
             # There is an index request to an earlier linked index
             il = self.get_link(data_value(['index'], node_def, dict), link_values, 'int')
@@ -616,6 +589,7 @@ class DATAnode():
         return False
 
     def get_value_list(self, vlist, link_values, valuetype = '', ltype = None):
+        # Check a list for links and then replace it with the link_value
         if not isinstance(vlist, (list, tuple)):
             vlist = [vlist]
 
@@ -651,6 +625,7 @@ class DATAnode():
         return rlist
 
     def get_value(self, value, link_values, valuetype = '', ltype = None):
+        # Check if value is a link statement and then return the link value in stead of value
         if is_data_value(['link'], value, int):
             return self.get_link(value ,link_values, ltype)
 
@@ -679,17 +654,23 @@ class DATAnode():
             return value
 
 
-    def match_node(self, node_def = None, link_values = None, last_node_def = False):
+    def match_node(self, node_def = None, link_values = None, only_check_validity = False):
+        # Return None if node_def is not a node definition then only collect any link request
+        # Detailed in HTML/JSON class, return True on matching the node_def
+        # Return False on failure to match
         self.link_value = {}
         return False
 
     def find_name(self, node_def):
+        # Detailed in child class. Collect and return any name definition
         return None
 
     def find_value(self, node_def = None):
+        # Detailed in child class Collect and return any value
         return self.dtree.calc_value(self.value, node_def)
 
     def print_node(self, print_all = False):
+        # Detailed in child class
         return u'%s = %s' % (self.level, self.find_value())
 
     def print_tree(self):
@@ -758,7 +739,7 @@ class HTMLnode(DATAnode):
 
         return childs
 
-    def match_node(self, tag = None, attributes = None, node_def = None, link_values=None, last_node_def = False):
+    def match_node(self, tag = None, attributes = None, node_def = None, link_values=None, only_check_validity = False):
         self.link_value = {}
         if not isinstance(link_values, dict):
             link_values ={}
@@ -784,10 +765,6 @@ class HTMLnode(DATAnode):
             else:
                 return False
 
-        elif is_data_value('path', node_def):
-            if not last_node_def:
-                self.check_for_linkrequest(node_def)
-
         elif is_data_value('tag', node_def):
             if self.get_value(node_def["tag"], link_values, 'tag', 'lower') in (None, self.tag.lower()):
                 # The tag matches
@@ -812,12 +789,9 @@ class HTMLnode(DATAnode):
             if self.check_index(node_def, link_values) in (False, None):
                 return False
 
-        elif is_data_value('path', node_def):
-            if not last_node_def:
-                self.check_for_linkrequest(node_def)
-
-        else:
-            if last_node_def:
+        elif not is_data_value('path', node_def):
+            # It's not a node definition
+            if only_check_validity:
                 self.check_for_linkrequest(node_def)
 
             return None
@@ -887,7 +861,7 @@ class HTMLnode(DATAnode):
                             # The attribute is in the ban list so exclude
                             return False
 
-        if not last_node_def:
+        if not only_check_validity:
             self.check_for_linkrequest(node_def)
 
         return True
@@ -1054,16 +1028,12 @@ class JSONnode(DATAnode):
 
         return None
 
-    def match_node(self, node_def = None, link_values = None, last_node_def = False):
+    def match_node(self, node_def = None, link_values = None, only_check_validity = False):
         self.link_value = {}
         if not isinstance(link_values, dict):
             link_values ={}
 
-        if is_data_value('path', node_def):
-            if not last_node_def:
-                self.check_for_linkrequest(node_def)
-
-        elif is_data_value('key', node_def):
+        if is_data_value('key', node_def):
             if is_data_value(['key','link'], node_def, int):
                 kl = self.get_link(data_value(['key'], node_def, dict), link_values)
 
@@ -1096,8 +1066,9 @@ class JSONnode(DATAnode):
             if self.check_index(node_def, link_values) in (False, None):
                 return False
 
-        else:
-            if last_node_def:
+        elif not is_data_value('path', node_def):
+            # It's not a node definition
+            if only_check_validity:
                 self.check_for_linkrequest(node_def)
 
             return None
@@ -1148,7 +1119,6 @@ class JSONnode(DATAnode):
                             return False
 
         if is_data_value('notchildkeys', node_def, (dict, list)):
-        #~ if is_data_value('notchildkeys', node_def):
             ck = data_value('notchildkeys', node_def)
             if not is_data_value('notchildkeys', node_def, list):
                 ck = [ck]
@@ -1168,7 +1138,7 @@ class JSONnode(DATAnode):
                             # The attribute is in the ban list so exclude
                             return False
 
-        if not last_node_def:
+        if not only_check_validity:
             self.check_for_linkrequest(node_def)
 
         return True
@@ -2466,8 +2436,6 @@ class DataTreeShell():
         A dict is return
         """
         def get_variable(vdef):
-            max_length = data_value('max length', vdef, int, 0)
-            min_length = data_value('min length', vdef, int, 0)
             varid = data_value("varid", vdef, int)
             if not ((isinstance(linkdata, list) and (0 <= varid < len(linkdata))) \
               or (isinstance(linkdata, dict) and varid in linkdata.keys())):
@@ -2476,24 +2444,6 @@ class DataTreeShell():
 
             # remove any leading or trailing spaces on a string/unicode value
             value = linkdata[varid] if (not  isinstance(linkdata[varid], (unicode, str))) else unicode(linkdata[varid]).strip()
-            # check on length restrictions
-            if isinstance(value, (str, unicode, list, dict)):
-                if min_length > 0 and len(value) < min_length:
-                    self.warn('Requested datavalue "%s" is smaller then'% (varid, min_length), dtLinkWarning, 4)
-                    return
-
-                if max_length > 0 and len(value) > max_length:
-                    self.warn('Requested datavalue "%s" is bigger then'% (varid, max_length), dtLinkWarning, 4)
-                    return
-
-            if isinstance(value, (int, float)):
-                if min_length > 0 and value < min_length:
-                    self.warn('Requested datavalue "%s" is shorter then'% (varid, min_length), dtLinkWarning, 4)
-                    return
-
-                if max_length > 0 and value > max_length:
-                    self.warn('Requested datavalue "%s" is longer then'% (varid, max_length), dtLinkWarning, 4)
-                    return
 
             # apply any regex, type or calc statements
             if is_data_value('regex', vdef, str):
@@ -2548,6 +2498,30 @@ class DataTreeShell():
                 value = calc_value(vdef['calc'], value)
 
             return value
+
+        def check_length(vdef, value, name):
+            max_length = data_value('max length', vdef, int, 0)
+            min_length = data_value('min length', vdef, int, 0)
+
+            if max_length > 0:
+                if isinstance(value, (str, unicode, list, dict)) and len(value) > max_length:
+                    self.warn('Requested datavalue "%s" is longer then'% (name, max_length), dtLinkWarning, 4)
+                    return False
+
+                if isinstance(value, (int, float)) and value > max_length:
+                    self.warn('Requested datavalue "%s" is bigger then'% (name, max_length), dtLinkWarning, 4)
+                    return False
+
+            if min_length > 0:
+                if isinstance(value, (str, unicode, list, dict)) and len(value) < min_length:
+                    self.warn('Requested datavalue "%s" is shorter then'% (name, min_length), dtLinkWarning, 4)
+                    return False
+
+                if isinstance(value, (int, float)) and value < min_length:
+                    self.warn('Requested datavalue "%s" is smaller then'% (name, min_length), dtLinkWarning, 4)
+                    return False
+
+            return True
 
         def get_regex(vdef, value):
             search_regex = data_value('regex', vdef, str, None)
@@ -2623,14 +2597,14 @@ class DataTreeShell():
                 # first check if it contains a varid statement
                 if is_data_value("varid", v, int):
                     vv = get_variable(v)
-                    if vv not in self.empty_values:
+                    if vv not in self.empty_values and check_length(v, vv, k):
                         values[k] = vv
                         continue
 
                 # else look for a funcid statement
                 elif is_data_value("funcid", v, int):
                     cval = process_link_function(v)
-                    if cval not in self.empty_values:
+                    if cval not in self.empty_values and check_length(v, cval, k):
                         values[k] = cval
                         continue
 
