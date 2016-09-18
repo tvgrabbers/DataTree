@@ -1688,7 +1688,7 @@ class FetchURL(Thread):
             try:
                 self.result = url_request.json()
 
-            except(ValueError):
+            except(ValueError) as e:
                 self.requester.log(u'Url %s does not return a valid json file\n' % (self.url, ))
                 self.requester.log( '  %s\n' % e)
 
