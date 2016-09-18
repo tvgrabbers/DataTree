@@ -2247,6 +2247,16 @@ class DataTreeShell():
             udf = self.data_value(["url-date-format"], str, default=None)
             udm = self.data_value(["url-date-multiplier"], int, default=1)
             uwd = self.data_value(["url-weekdays"], list)
+            rwd = {}
+            if self.is_data_value( "url-relative-weekdays", dict):
+                wd = self.data_value( "url-relative-weekdays", dict)
+                for dname, dno in wd.items():
+                    try:
+                        rwd[int(dno)] = dname
+
+                    except:
+                        pass
+
             if urlid == 0:
                 # Return the value of the given variable in data
                 # transposing a list or dict-key list to a comma separated list
@@ -2307,6 +2317,9 @@ class DataTreeShell():
 
                 elif udt == 2:
                     # oorboekje.nl, nieuwsblad.be
+                    if offset in rwd.keys():
+                        return unicode(rwd[offset])
+
                     return get_weekday(self.current_ordinal + offset)
 
                 else:
@@ -2342,8 +2355,15 @@ class DataTreeShell():
                     end = get_timestamp(self.current_ordinal + end)
 
                 elif udt == 2:
-                    start = get_weekday(self.current_ordinal + start)
-                    end = get_weekday(self.current_ordinal + end)
+                    if start in rwd.keys():
+                        start = unicode(rwd[start])
+                    else:
+                        start = get_weekday(self.current_ordinal + start)
+
+                    if end in rwd.keys():
+                        end = unicode(rwd[end])
+                    else:
+                        end = get_weekday(self.current_ordinal + end)
 
                 else:
                     url_warning('Invalid "url-date-type"')
@@ -2379,6 +2399,26 @@ class DataTreeShell():
 
         with self.tree_lock:
             if isinstance(data, (dict, list)):
+                dttype = 'json'
+                if self.is_data_value(['data', 'sort'], list):
+                    # There is a sort request
+                    for sitem in self.data_value(['data', 'sort'], list):
+                        try:
+                            sort_list(data, data_value('path', sitem, list), data_value('childkeys', sitem, list))
+
+                        except:
+                            self.warn('Sort request "%s" failed!' % (sitem), dtDataWarning, 1)
+
+                self.searchtree = JSONtree(data, self.fle, caller_id = self.caller_id)
+
+            elif isinstance(data, (str, unicode)) and data.strip()[0] in ("{", "["):
+                try:
+                    data = json.loads(data)
+
+                except:
+                    self.warn('Failed to initialise the searchtree. Run with a valid dataset %s' % type(data), dtDataWarning, 1)
+                    return
+
                 dttype = 'json'
                 if self.is_data_value(['data', 'sort'], list):
                     # There is a sort request
