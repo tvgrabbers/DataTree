@@ -2545,20 +2545,20 @@ class DataTreeShell():
 
             if max_length > 0:
                 if isinstance(value, (str, unicode, list, dict)) and len(value) > max_length:
-                    self.warn('Requested datavalue "%s" is longer then'% (name, max_length), dtLinkWarning, 4)
+                    self.warn('Requested datavalue "%s" is longer then %s'% (name, max_length), dtLinkWarning, 4)
                     return False
 
                 if isinstance(value, (int, float)) and value > max_length:
-                    self.warn('Requested datavalue "%s" is bigger then'% (name, max_length), dtLinkWarning, 4)
+                    self.warn('Requested datavalue "%s" is bigger then %s'% (name, max_length), dtLinkWarning, 4)
                     return False
 
             if min_length > 0:
                 if isinstance(value, (str, unicode, list, dict)) and len(value) < min_length:
-                    self.warn('Requested datavalue "%s" is shorter then'% (name, min_length), dtLinkWarning, 4)
+                    self.warn('Requested datavalue "%s" is shorter then %s'% (name, min_length), dtLinkWarning, 4)
                     return False
 
                 if isinstance(value, (int, float)) and value < min_length:
-                    self.warn('Requested datavalue "%s" is smaller then'% (name, min_length), dtLinkWarning, 4)
+                    self.warn('Requested datavalue "%s" is smaller then %s'% (name, min_length), dtLinkWarning, 4)
                     return False
 
             return True
