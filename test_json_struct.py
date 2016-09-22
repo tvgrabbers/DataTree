@@ -133,6 +133,7 @@ class test_JSON():
         self.struct_list = []
         self.struct_tree = {}
         self.lookup_lists = {}
+        self.lookup_list_keys = {}
         self.reference_values = {}
         self.only_local_files = False
         #~ self.only_local_files = True
@@ -245,10 +246,19 @@ class test_JSON():
                                 'value': deepcopy(e['value'])}, ve)
 
                         if ve == 2:
-                            append_error(importance, etype, e['path'],
-                                {'type':e['type'][index],
-                                'value': deepcopy(e['value']),
-                                'list':self.lookup_lists[e['type'][index]]}, ve)
+                            if e['list_key'] == None:
+                                append_error(importance, etype, e['path'],
+                                    {'type':e['type'][index],
+                                    'value': deepcopy(e['value']),
+                                    'list':self.lookup_lists[e['type'][index]],
+                                    'list_key': e['list_key']}, ve)
+
+                            else:
+                                append_error(importance, etype, e['path'],
+                                    {'type':e['type'][index],
+                                    'value': deepcopy(e['value']),
+                                    'list':self.lookup_lists[e['type'][index]][e['list_key']],
+                                    'list_key': e['list_key']}, ve)
 
                         if ve == 3:
                             append_error(importance, etype, e['path'],
@@ -378,27 +388,110 @@ class test_JSON():
 
     def load_lookup_lists(self, struct_name, testval):
         # Load reference lists and values from the datafile
-        def fill_list():
+        def extract_list(dset):
+            dlist = []
+            ilist = []
+            slist = []
             if v == 'keys' and isinstance(dset, dict):
-                lookup_lists.extend(dset.keys())
+                dlist.extend(dset.keys())
 
-            if v == 'intkeys' and isinstance(dset, dict):
+            elif v == 'intkeys' and isinstance(dset, dict):
                 for k in dset.keys():
                     try:
                         s = int(k)
-                        lookup_lists.append(k)
-                        lookup_lists.append(s)
-                        int_list.append(s)
+                        dlist.append(k)
+                        dlist.append(s)
+                        slist.append(k)
+                        ilist.append(s)
 
                     except:
                         pass
 
-            if v == 'values':
+            elif v == 'values':
                 if isinstance(dset, dict):
-                    lookup_lists.extend(dset.values())
+                    dlist.extend(dset.values())
 
                 if isinstance(dset, list):
-                    lookup_lists.extend(dset[:])
+                    dlist.extend(dset[:])
+
+            elif v == 'index' and isinstance(dset, list):
+                lup = range(len(dset))
+                for item in lup:
+                    dlist.append(item)
+                    dlist.append(unicode(item))
+                    ilist.append(item)
+                    slist.append(unicode(item))
+
+            return (dlist, ilist, slist)
+
+        def add_list(lname, data, allowed = True, key = None):
+            if key == None and isinstance(self.lookup_lists[lname], dict) or \
+              key != None and isinstance(self.lookup_lists[lname], list):
+                return
+
+            iname = 'int-%s' % lname
+            sname = 'str-%s' % lname
+            if allowed:
+                if key == None:
+                    self.lookup_lists[lname].extend(data[0])
+                    self.lookup_lists[lname] = list(set(self.lookup_lists[lname]))
+                    self.lookup_lists[iname].extend(data[1])
+                    self.lookup_lists[iname] = list(set(self.lookup_lists[iname]))
+                    self.lookup_lists[sname].extend(data[2])
+                    self.lookup_lists[sname] = list(set(self.lookup_lists[sname]))
+
+                else:
+                    if not key in self.lookup_lists[lname].keys():
+                        self.lookup_lists[lname][key] = data[0]
+
+                    else:
+                        self.lookup_lists[lname][key].extend(data[0])
+
+                    self.lookup_lists[lname][key] = list(set(self.lookup_lists[lname][key]))
+
+                    if not key in self.lookup_lists[iname].keys():
+                        self.lookup_lists[iname][key] = data[1]
+
+                    else:
+                        self.lookup_lists[iname][key].extend(data[1])
+
+                    self.lookup_lists[iname][key] = list(set(self.lookup_lists[iname][key]))
+
+                    if not key in self.lookup_lists[sname].keys():
+                        self.lookup_lists[sname][key] = data[2]
+
+                    else:
+                        self.lookup_lists[sname][key].extend(data[2])
+
+                    self.lookup_lists[sname][key] = list(set(self.lookup_lists[sname][key]))
+
+            else:
+                for val in data[0]:
+                    if key == None:
+                        if val in self.lookup_lists[lname]:
+                            self.lookup_lists[lname].remove(val)
+
+                    else:
+                        if val in self.lookup_lists[lname][key]:
+                            self.lookup_lists[lname][key].remove(val)
+
+                for val in data[1]:
+                    if key == None:
+                        if val in self.lookup_lists[iname]:
+                            self.lookup_lists[iname].remove(val)
+
+                    else:
+                        if val in self.lookup_lists[iname][key]:
+                            self.lookup_lists[iname][key].remove(val)
+
+                for val in data[2]:
+                    if key == None:
+                        if val in self.lookup_lists[sname]:
+                            self.lookup_lists[sname].remove(val)
+
+                    else:
+                        if val in self.lookup_lists[sname][key]:
+                            self.lookup_lists[sname][key].remove(val)
 
         for k, ldef in data_value([struct_name, "reference_values"],self.struct_tree, dict).items():
             kw = data_value(["keyword"], ldef, list)
@@ -419,54 +512,69 @@ class test_JSON():
             else:
                 self.reference_values[k] = data_value(kw, testval, default = default)
 
-        for lname, deflist in data_value([struct_name, "lookup_lists"],self.struct_tree, dict).items():
+        if is_data_value([struct_name, "lookup_lists", "list_order"],self.struct_tree, list):
+            lupnames = data_value([struct_name, "lookup_lists", "list_order"],self.struct_tree, list)
+
+        else:
+            lupnames = data_value([struct_name, "lookup_lists"],self.struct_tree, dict).keys()
+
+        for lname in lupnames:
+            deflist = data_value([struct_name, "lookup_lists", lname],self.struct_tree)
             if not isinstance(deflist, list):
                 deflist = [deflist]
 
+            if is_data_value([0, "groupby"], deflist, dict):
+                for n in (lname, 'int-%s' % lname, 'str-%s' % lname):
+                    if not data_value([0, "append"], deflist, bool, False) or \
+                      not is_data_value (n, self.lookup_lists, dict):
+                        self.lookup_lists[n] = {}
+
+            else:
+                for n in (lname, 'int-%s' % lname, 'str-%s' % lname):
+                    if not data_value([0, "append"], deflist, bool, False) or \
+                      not is_data_value (n, self.lookup_lists, list):
+                        self.lookup_lists[n] = []
+
             for ldef in deflist:
+                allowed = data_value(["allowed"], ldef, bool, True)
                 if not self.test_condition(ldef):
                     continue
 
-                int_list = []
                 if is_data_value(["list"], ldef, list):
-                    lookup_lists = data_value(["list"], ldef, list)
+                    add_list(lname, (data_value("list", ldef, list),
+                                    data_value("int-list", ldef, list),
+                                    data_value("str-list", ldef, list)), allowed)
 
                 else:
-                    lookup_lists = []
                     v = data_value(["values"], ldef, str)
                     level = data_value(["level"], ldef, int, 1)
                     kw = data_value(["keyword"], ldef, list)
+                    bset = data_value(kw, testval)
                     if level == 1:
-                        dset = data_value(kw, testval)
-                        fill_list()
+                        add_list(lname, extract_list(bset), allowed)
 
                     elif level == 2:
-                        bset = data_value(kw, testval)
-                        if isinstance(bset, list):
+                        if is_data_value(["groupby"], ldef, dict):
+                            gblevel = data_value(["groupby","level"], ldef, int, 1)
+                            gbtype = data_value(["groupby","type"], ldef, str)
+                            if gblevel == 1:
+                                if isinstance(bset, list):
+                                    for key in range(len(bset)):
+                                        if gbtype == '' or self.test_type(gbtype, key) == 0:
+                                            add_list(lname, extract_list(bset[key]), allowed, key)
+
+                                elif isinstance(bset, dict):
+                                    for key in bset.keys():
+                                        if gbtype == '' or self.test_type(gbtype, key) == 0:
+                                            add_list(lname, extract_list(bset[key]), allowed, key)
+
+                        elif isinstance(bset, list):
                             for dset in bset:
-                                fill_list()
+                                add_list(lname, extract_list(dset), allowed)
 
                         elif isinstance(bset, dict):
                             for dset in bset.values():
-                                fill_list()
-
-                if data_value(["append"], ldef, bool, False) and is_data_value (lname, self.lookup_lists, list):
-                    for item in set(lookup_lists):
-                        if not item in self.lookup_lists[lname]:
-                            self.lookup_lists[lname].append(item)
-
-                else:
-                    self.lookup_lists[lname] = list(set(lookup_lists))
-
-                if len(int_list) > 0:
-                    int_name = 'int-%s' % lname
-                    if data_value(["append"], ldef, bool, False) and is_data_value (int_name, self.lookup_lists, list):
-                        for item in set(int_list):
-                            if not item in self.lookup_lists[int_name]:
-                                self.lookup_lists[int_name].append(item)
-
-                    else:
-                        self.lookup_lists[int_name] = list(set(int_list))
+                                add_list(lname, extract_list(dset), allowed)
 
         self.add_extra_lookup_lists(struct_name)
 
@@ -706,14 +814,6 @@ class test_JSON():
             if data_value(['conditional-type', 'key'], tstruct, dict) in self.testfile.keys():
                 self.base_type.append(data_value(['conditional-type', 'name'], tstruct, str))
 
-        #~ print 'testing', struct_name, self.base_type
-        #~ print '  reference_values:'
-        #~ for k, v in  self.reference_values.items():
-            #~ print '   ', k, '=', v
-        #~ print '  lookup_lists:'
-        #~ for k, v in  self.lookup_lists.items():
-            #~ print '   ', k, '=', v
-
         if is_data_value('types', tstruct, list):
             self.test_typelist(data_value('types', tstruct, list), self.testfile)
 
@@ -827,6 +927,7 @@ class test_JSON():
 
     def test_type(self, dtypes, val):
         reason = ''
+        list_key = None
         def set_error(err):
             if len(keyerrs) > 0:
                 if isinstance(err, list):
@@ -837,6 +938,7 @@ class test_JSON():
 
             self.trep = {'error': err,
                             'type': dtype,
+                            'list_key': list_key,
                             'value': val,
                             'length':data_value("length", dtypes, int, 0),
                             'report':data_value([dtype,"report"], self.struct_tree),
@@ -894,11 +996,8 @@ class test_JSON():
                     return set_error(1)
 
             ktype = None
-            if is_data_value("keys", dtypes, str, True):
-                ktype = data_value("keys", dtypes, str)
-
-            elif is_data_value("keys", dtypes, list, True):
-                ktype = data_value("keys", dtypes, list)
+            if is_data_value("keys", dtypes, (str, list), True):
+                ktype = data_value("keys", dtypes)
 
             if ktype != None:
                 for k in val.keys():
@@ -972,8 +1071,18 @@ class test_JSON():
                 # Wrong type
                 return set_error(1)
 
-        elif dtype in self.lookup_lists.keys():
+        elif is_data_value(dtype, self.lookup_lists, list):
             if not val in self.lookup_lists[dtype]:
+                # Wrong type
+                return set_error(2)
+
+        elif is_data_value(dtype, self.lookup_lists, dict):
+            if dtype in self.lookup_list_keys.keys():
+                list_key = copy(self.lookup_list_keys[dtype])
+
+            if not dtype in self.lookup_list_keys.keys() or \
+              not is_data_value([dtype, list_key], self.lookup_lists, list) or \
+              not val in self.lookup_lists[dtype][list_key]:
                 # Wrong type
                 return set_error(2)
 
@@ -999,6 +1108,7 @@ class test_JSON():
 
     def test_typelist(self, typelist, testval, vpath=None):
         errlist = []
+        old_lookup_list_keys = deepcopy(self.lookup_list_keys)
         if typelist == None:
             return errlist
 
@@ -1030,6 +1140,9 @@ class test_JSON():
 
                         spath = [] if vpath == None else copy(vpath)
                         spath.append(k)
+                        if is_data_value([0, "sublist-key"], typelist, str):
+                            self.lookup_list_keys[data_value([0, "sublist-key"], typelist, str)] = k
+
                         errlist.extend(self.test_typelist( typelist[1:], v, spath))
 
             elif vr['type'] == 'list':
@@ -1039,8 +1152,12 @@ class test_JSON():
                     for item in range(len(testval)):
                         spath = [] if vpath == None else copy(vpath)
                         spath.append(item)
+                        if is_data_value([0, "sublist-key"], typelist, str):
+                            self.lookup_list_keys[data_value([0, "sublist-key"], typelist, str)] = item
+
                         errlist.extend(self.test_typelist( typelist[1:], testval[item], spath))
 
+        self.lookup_list_keys = old_lookup_list_keys
         return errlist
 
     def test_struct(self, struct_name, testval, vpath):
@@ -1199,6 +1316,7 @@ class test_JSON():
         return either_test
 
     def test_dict(self, sstruct, testval, vpath=None):
+        old_lookup_list_keys = deepcopy(self.lookup_list_keys)
         if is_data_value('either', sstruct, dict):
             teststruct = {}
             add_keys = []
@@ -1332,16 +1450,45 @@ class test_JSON():
         for dkey in testval.keys():
             if not dkey in known_keys and not re.match('--.*?--', dkey):
                 if dkey in forbidden_list:
-                        forbidden.append(dkey)
+                    forbidden.append(dkey)
+                    continue
 
                 if dkey in unused_list:
-                        unused.append(dkey)
+                    unused.append(dkey)
+                    continue
 
-                elif data_value("allowed", teststruct, str) != 'all':
-                    for dset in range(1, len(self.imp)):
-                        if self.imp[dset] in teststruct:
-                            unknown.append(dkey)
+                if is_data_value("other_keys", teststruct, (list, dict), True):
+                    ok_list = data_value("other_keys", teststruct)
+                    if not isinstance(ok_list, list):
+                        ok_list = [ok_list]
+
+                    for ok_dict in ok_list:
+                        ktype = None
+                        if is_data_value("keys", ok_dict, (str, list), True):
+                            ktype = data_value("keys", ok_dict)
+
+                        if ktype != None and self.test_type(ktype,dkey) == 0:
+                            if is_data_value("sublist-key", ok_dict, str):
+                                self.lookup_list_keys[data_value("sublist-key", ok_dict, str)] = dkey
+
+                            typelist = data_value(["types"], ok_dict, default = [])
+                            spath = [] if vpath == None else copy(vpath)
+                            spath.append(dkey)
+                            self.add_error(self.test_typelist(typelist, testval[dkey], spath), 'type_errors', spath)
                             break
+
+                    else:
+                        if is_data_value("keys", teststruct, (list, str), True) and \
+                            self.test_type(data_value("keys", teststruct), dkey) == 0:
+                                continue
+
+                        if data_value("allowed", teststruct, str) == 'all':
+                            continue
+
+                        for dset in range(1, len(self.imp)):
+                            if self.imp[dset] in teststruct:
+                                unknown.append(dkey)
+                                break
 
         # Report found errors
         for imp in range(1, len(self.imp) - 1):
@@ -1351,6 +1498,8 @@ class test_JSON():
         for eset in ((unused, 'unused_keys'),(unknown, 'unknown_keys'),(forbidden, 'forbidden_keys')):
             if len(eset[0]) > 0:
                 self.add_error(eset[0], eset[1],vpath)
+
+        self.lookup_list_keys = old_lookup_list_keys
 
     def test_list(self, sstruct, testval, vpath=None):
         len_list =  len(testval)
@@ -1392,11 +1541,19 @@ class test_JSON():
                     return 'Value %s is not of type: "%s"' % (tvals['value'],tvals['type'])
 
             elif ttype ==2:
-                if isinstance(tvals['value'], (str, unicode)):
-                    return 'Value "%s" not in "%s"' % (tvals['value'],tvals['list'])
+                if len(tvals['list']) > 10:
+                    if isinstance(tvals['value'], (str, unicode)):
+                        return 'Value "%s" not in the "%s" list' % (tvals['value'],tvals['type'][4:])
+
+                    else:
+                        return 'Value %s not in the "%s" list' % (tvals['value'],tvals['type'][4:])
 
                 else:
-                    return 'Value %s not in "%s"' % (tvals['value'],tvals['list'])
+                    if isinstance(tvals['value'], (str, unicode)):
+                        return 'Value "%s" not in "%s"' % (tvals['value'],tvals['list'])
+
+                    else:
+                        return 'Value %s not in "%s"' % (tvals['value'],tvals['list'])
 
             elif ttype == 3:
                 return 'Value not of length: %s' % tvals['length']
