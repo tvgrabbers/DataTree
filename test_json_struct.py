@@ -37,7 +37,11 @@ from DataTreeGrab import is_data_value, data_value, version
 #               a list keyword holding the actual list
 #           or:
 #               keyword: the keyword to extract the values from
-#               values: the type of values: keys, intkeys or values
+#               values: the type of values: keys, intkeys, index or values
+#                   In case of intkeys and index 3 lists are created
+#                   one with a prefix of "int-" containing the integer values
+#                   one with a prefix of "str-" containing the string values
+#                   and one without prefix containing both
 #               level: the level to look, default is 1
 #           and:
 #               append: True or False on whether to overwrite an existing list
@@ -47,12 +51,16 @@ from DataTreeGrab import is_data_value, data_value, version
 #               reference_key:
 #               regex:
 #               value:
+#           group_by: To group on a lower keyword with a level and a type keyword.
+#               At any point you can store a selection value with "sublist-key" containing
+#               the name of the lookup_list. Any type validation will then use that sublist.
 #       reference_values: dict with named reference values to use in a conditional set
 #           with:
 #               keyword: a list of keyword to follow to the value
 #               type: either: integer, string or boolean
 #               default: the value to use if the the value is not found
-#       report: text to add in a report to describe the selection critiria on failure
+#       base-type: a name to be used in conditional statements
+#       report: A named dict of texts to add in a report to describe the selection critiria on failure
 #   Any value in the below types dict or if type = list a types dict
 #
 #   types: list of (types or type-lists) or
@@ -65,14 +73,18 @@ from DataTreeGrab import is_data_value, data_value, version
 #               reverse_items: reversed positional type(list) like 'types'
 #               other_items: A type(list) for items not covered by either of the above
 #           if a dict (potential root for a struct):
+#               sublist-key: use this key for sublist selection
 #               keys:  type or type-list
-#               either: a dict with lists of alternatives
+#               either: a named dict with lists of alternatives. The name can be used inside the report keyword.
+#                   Here an extra keyword "conditional_either" is possible with an extra conditional test
+#                   on whether this set will participate as possible alternative
+#                   It encapsulates a normal keyword together with a conditional statement
 #               required: dict of key names with a dict with a types list:
 #               sugested: dict of key names with a dict with a types list:
 #               optional: dict of key names with a dict with a types list:
 #               conditional: dict of key names with a dict with a types list:
 #                   with extra keys:
-#                       base_type:
+#                       base-type:
 #                       presence_key: a key to be present in the dict
 #                       reference_key: a key value defined in reference_values
 #                       value: a list of values to compare with
@@ -85,12 +97,16 @@ from DataTreeGrab import is_data_value, data_value, version
 #                           0: ignore (mark as known and do not test or report)
 #                          -1: unused (mark as known, report on presence)
 #                          -2: forbidden (mark as known, report on presence, used in selecting an either sub-struct)
-#               allowed: "all"
+#               allowed: "all" this stops the looking for unknown keys
+#               other_keys: a (list of) dicts with a keys and types statement. Any key of that type is validated
+#                   and treated as known
 #               ignore_keys: list of 'unknown' keys
 #                   (all keys matching regex: '--.*?--' are ignored)
 #               unused_keys: list of known keys
-#               forbidden_keys: list of forbidden keys (at the root of a struct or an either)
+#               forbidden_keys: list of forbidden keys (at the root of a struct or an either outside struct or
+#                   either validation it is treated as equal to unused_keys
 #   default: valid for the last item in a types list
+#   reference-default: A default pointing to value on a lower level, stored in reference_values
 #
 # Valid types:
 #   dict ,numbered dict ,list, integer, string, tz-string, boolean, time, date, url, none
@@ -509,6 +525,9 @@ class test_JSON():
             elif vtype == 'boolean':
                 self.reference_values[k] = data_value(kw, testval, bool, default = default)
 
+            elif vtype == 'list':
+                self.reference_values[k] = data_value(kw, testval, list, default = default)
+
             else:
                 self.reference_values[k] = data_value(kw, testval, default = default)
 
@@ -826,7 +845,7 @@ class test_JSON():
         old_references = {}
         def init_struct():
             self.init_struct(struct_name, testval)
-            old_references['base_type'] = self.base_type[:]
+            old_references['base-type'] = self.base_type[:]
             if is_data_value('base-type', sstruct, str):
                 self.base_type.append(sstruct['base-type'])
 
@@ -841,7 +860,7 @@ class test_JSON():
         def reset_struct(testlist, just_reset = False):
             self.reference_values = old_references['values']
             self.lookup_lists = old_references['lists']
-            self.base_type = old_references['base_type']
+            self.base_type = old_references['base-type']
             if just_reset:
                 return testlist
 
@@ -1165,7 +1184,7 @@ class test_JSON():
         old_references = {}
         def init_struct():
             self.init_struct(struct_name, testval)
-            old_references['base_type'] = self.base_type[:]
+            old_references['base-type'] = self.base_type[:]
             if is_data_value('base-type', struct, str):
                 if struct['base-type'] == "data_def":
                     if not is_data_value('data-format', testval, str):
@@ -1188,7 +1207,7 @@ class test_JSON():
         def reset_struct():
             self.reference_values = old_references['values']
             self.lookup_lists = old_references['lists']
-            self.base_type = old_references['base_type']
+            self.base_type = old_references['base-type']
 
         struct = self.struct_tree[struct_name]
         if not init_struct():
@@ -1220,12 +1239,12 @@ class test_JSON():
         return errlist
 
     def test_condition(self, sstruct, testkeys = None):
-        if is_data_value(['base_type'], sstruct, str):
-            if not sstruct['base_type'] in self.base_type:
+        if is_data_value(['base-type'], sstruct, str):
+            if not sstruct['base-type'] in self.base_type:
                 return False
 
-        if is_data_value(['base_type'], sstruct, list):
-            for k in sstruct['base_type']:
+        if is_data_value(['base-type'], sstruct, list):
+            for k in sstruct['base-type']:
                 if k in self.base_type:
                     break
 
@@ -1316,6 +1335,27 @@ class test_JSON():
         return either_test
 
     def test_dict(self, sstruct, testval, vpath=None):
+        def test_missing(dset, dkey, imp):
+            if not dkey in testval.keys():
+                refdev = data_value([dset, dkey, 'reference-default'], teststruct, str)
+                if is_data_value([dset, dkey, 'default'], teststruct):
+                    missing[imp].append((dkey, data_value([dset, dkey, 'default'], teststruct)))
+
+                elif refdev not in ('', None) and refdev in self.reference_values.keys():
+                    missing[imp].append((dkey, self.reference_values[refdev]))
+
+                else:
+                    missing[imp].append((dkey, None))
+
+                return
+
+            # get the type definition list for this key
+            typelist = data_value([dset, dkey,"types"], teststruct, default = [])
+            # set the context
+            spath = [] if vpath == None else copy(vpath)
+            spath.append(dkey)
+            self.add_error(self.test_typelist(typelist, testval[dkey], spath), 'type_errors', spath, imp)
+
         old_lookup_list_keys = deepcopy(self.lookup_list_keys)
         if is_data_value('either', sstruct, dict):
             teststruct = {}
@@ -1390,44 +1430,14 @@ class test_JSON():
             known_keys.extend(data_value([dset], teststruct, dict).keys())
             for dkey in data_value([dset], teststruct, dict).keys():
                 # test on the presence of defined keys
-                if not dkey in testval.keys():
-                    if is_data_value([dset, dkey, 'default'], teststruct):
-                        missing[imp].append((dkey, data_value([dset, dkey, 'default'], teststruct)))
-
-                    else:
-                        missing[imp].append((dkey, None))
-
-                    continue
-
-                # get the type definition list for this key
-                typelist = data_value([dset, dkey,"types"], teststruct, default = [])
-                spath = [] if vpath == None else copy(vpath)
-                spath.append(dkey)
-                self.add_error(self.test_typelist(typelist, testval[dkey], spath), 'type_errors', spath, imp)
+                test_missing(dset, dkey, imp)
 
         for dkey in data_value(['conditional'], teststruct, dict).keys():
             imp = self.conditional_imp(dkey, teststruct, testval.keys())
             if imp in range(1, len(self.imp) - 1):
                 known_keys.append(dkey)
                 # test on the presence of defined keys
-                if not dkey in testval.keys():
-                    if not imp in missing.keys():
-                        missing[imp] = []
-
-                    if is_data_value(['conditional', dkey, 'default'], teststruct):
-                        missing[imp].append((dkey, data_value(['conditional', dkey, 'default'], teststruct)))
-
-                    else:
-                        missing[imp].append((dkey, None))
-
-                    continue
-
-                # get the type definition list for this key
-                typelist = data_value(['conditional', dkey,"types"], teststruct, default = [])
-                # set the context
-                spath = [] if vpath == None else copy(vpath)
-                spath.append(dkey)
-                self.add_error(self.test_typelist(typelist, testval[dkey], spath), 'type_errors', spath, imp)
+                test_missing('conditional', dkey, imp)
 
             # ignore the key
             elif imp == 0:

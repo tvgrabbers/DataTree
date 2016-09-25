@@ -53,8 +53,8 @@ except ImportError:
 dt_name = u'DataTreeGrab'
 dt_major = 1
 dt_minor = 2
-dt_patch = 2
-dt_patchdate = u'20160831'
+dt_patch = 3
+dt_patchdate = u'20160925'
 dt_alfa = False
 dt_beta = True
 _warnings = None
