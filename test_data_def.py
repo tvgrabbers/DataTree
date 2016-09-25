@@ -31,7 +31,6 @@ if len(cmd) < 2:
     testjson.log('Please give the name of the json file to test.\n')
     sys.exit(1)
 
-sys.exit(testjson.test_file(cmd[1]))
 if len(cmd) == 2:
     sys.exit(testjson.test_file(cmd[1], report_level = (1+2+4+8+16+128+256)))
 
