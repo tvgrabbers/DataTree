@@ -1867,12 +1867,24 @@ class HTMLtree(HTMLParser, DATAtree):
             self.count_tags(data)
             # read the html page into the tree
             try:
+                if u'<body>' in data and not u'</body>' in data:
+                    data = u'%s</body>' % data
+
+                if u'<BODY>' in data and not u'</BODY>' in data:
+                    data = u'%s</BODY>' % data
+
+                if u'<html>' in data and not u'</html>' in data:
+                    data = u'%s</html>' % data
+
+                if u'<HTML>' in data and not u'</HTML>' in data:
+                    data = u'%s</HTML>' % data
+
                 self.feed(data)
                 self.reset()
                 self.start_node = self.root
 
             except:
-                self.warn('Unable to parse the HTML data. Invalid dataset!\n' + traceback.print_exc(), dtDataWarning, 1)
+                self.warn('Unable to parse the HTML data. Invalid dataset!\n', dtDataWarning, 1)
                 self.start_node = NULLnode()
 
     def count_tags(self, data):
@@ -2434,6 +2446,18 @@ class DataTreeShell():
             elif isinstance(data, (str, unicode)) and data.strip()[0] == "<":
                 dttype = 'html'
                 autoclose_tags = self.data_value(["autoclose-tags"], list)
+                if u'<body>' in data and not u'</body>' in data:
+                    data = u'%s</body>' % data
+
+                if u'<BODY>' in data and not u'</BODY>' in data:
+                    data = u'%s</BODY>' % data
+
+                if u'<html>' in data and not u'</html>' in data:
+                    data = u'%s</html>' % data
+
+                if u'<HTML>' in data and not u'</HTML>' in data:
+                    data = u'%s</HTML>' % data
+
                 if self.data_value(["enclose-with-html-tag"], bool, default=False):
                     data = u'<html>%s</html>' % data
 
