@@ -28,6 +28,27 @@ but as this name is already taken in the Python library...
  * You can make the data_def available on a central location while distributing  
    the aplication and so giving your users easy access to (automated) updates.
 
+With [version 1.2.4](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.2.4-p20160930)
+ * implemented "text_replace" keyword to search and replace in the html data before importing
+ * implemented "unquote_html" keyword to correct `", < and >` occurence in html data
+ * made it possible to read a partial read html page by checking and adding on a missing `</html>` 
+   and or `</body>`tag
+
+With [version 1.2.3](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.2.3-p20160925)
+ * implemented "url-relative-weekdays" keyword
+ * some bug fixes
+ * Updates on the test module
+
+With [version 1.2.2](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.2.2-p20160831)
+ * Updates on the test module
+ * Some code sanitation
+
+With [version 1.2.1](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.2.1-p20160822)
+ * Updates on the test module
+
+With [version 1.2.0](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.2.0-p20160820)
+ * Implemented a data_def test module
+
 With [version 1.1.4](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.1.4-p20160723)
  * Implemented a stripped and extended Warnings framework
  * Added optional sorting before extraction of part of a JSON tree
