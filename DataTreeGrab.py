@@ -53,8 +53,8 @@ except ImportError:
 dt_name = u'DataTreeGrab'
 dt_major = 1
 dt_minor = 2
-dt_patch = 3
-dt_patchdate = u'20160925'
+dt_patch = 4
+dt_patchdate = u'20160930'
 dt_alfa = False
 dt_beta = True
 _warnings = None
@@ -512,9 +512,17 @@ class DATAnode():
 
     def check_for_linkrequest(self, node_def):
         if is_data_value('link', node_def, int):
-            self.link_value[node_def['link']] = self.find_value(node_def)
+            lv = self.find_value(node_def)
+            self.link_value[node_def['link']] = lv
             if self.dtree.show_result:
-                self.dtree.print_text(u'    saving link to node %s: %s\n      %s\n'.encode('utf-8', 'replace') % (self.find_value(node_def), self.print_node(), node_def))
+                if isinstance(lv, (str,unicode)):
+                    self.dtree.print_text(u'    saving link to node (="%s"): %s\n      %s\n'.encode('utf-8', 'replace') % \
+                        (lv, self.print_node(), node_def))
+
+                else:
+                    self.dtree.print_text(u'    saving link to node (=%s): %s\n      %s\n'.encode('utf-8', 'replace') % \
+                        (lv, self.print_node(), node_def))
+
 
     def get_link(self, sub_def, link_values, ltype = None):
         # retrieve a stored link_value
@@ -1867,6 +1875,7 @@ class HTMLtree(HTMLParser, DATAtree):
             self.count_tags(data)
             # read the html page into the tree
             try:
+                # Cover for incomplete reads where the essentiel body part is retrieved
                 if u'<body>' in data and not u'</body>' in data:
                     data = u'%s</body>' % data
 
@@ -2395,6 +2404,24 @@ class DataTreeShell():
         pass
 
     def init_data(self, data, init_start_node = True):
+        def unquote(matchobj):
+            rval = matchobj.group(0)
+            try:
+                for mg in matchobj.groups():
+                    if mg == None:
+                        continue
+
+                    tt = mg
+                    for s in (('"', '&quot;'), ('<', '&lt;'), ('>', '&gt;')):
+                        if s[0] in tt:
+                            tt = re.sub(s[0], s[1], tt)
+
+                    rval = re.sub(re.escape(mg), tt, rval)
+                return rval
+
+            except:
+                return rval
+
         def sort_list(page, path, childkeys):
             if is_data_value(path, page, list):
                 if len(childkeys) == 1:
@@ -2446,6 +2473,7 @@ class DataTreeShell():
             elif isinstance(data, (str, unicode)) and data.strip()[0] == "<":
                 dttype = 'html'
                 autoclose_tags = self.data_value(["autoclose-tags"], list)
+                # Cover for incomplete reads where the essentiel body part is retrieved
                 if u'<body>' in data and not u'</body>' in data:
                     data = u'%s</body>' % data
 
@@ -2460,6 +2488,22 @@ class DataTreeShell():
 
                 if self.data_value(["enclose-with-html-tag"], bool, default=False):
                     data = u'<html>%s</html>' % data
+
+                for subset in self.data_value(["text_replace"], list):
+                    if isinstance(subset, list) and len(subset) >= 2:
+                        try:
+                            data = re.sub(subset[0], subset[1], data, 0, re.DOTALL)
+
+                        except:
+                            self.warn('An error occured applying "text_replace" regex: "%s"' % subset, dtDataWarning, 2)
+
+                for ut in self.data_value(["unquote_html"], list):
+                    if isinstance(ut, (str, unicode)):
+                        try:
+                            data = re.sub(ut, unquote, data, 0, re.DOTALL)
+
+                        except:
+                            self.warn('An error occured applying "unquote_html" regex: "%s"' % ut, dtDataWarning, 2)
 
                 self.searchtree = HTMLtree(data, autoclose_tags, self.print_tags, self.fle, caller_id = self.caller_id)
 
