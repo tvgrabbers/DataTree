@@ -30,7 +30,8 @@ but as this name is already taken in the Python library...
 
 With [version 1.2.4](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.2.4-p20160930)
  * implemented "text_replace" keyword to search and replace in the html data before importing
- * implemented "unquote_html" keyword to correct `", < and >` occurence in html data
+ * implemented "unquote_html" keyword to correct `", < and >` occurence in html text by replacing 
+   them with the correct `&quot;, &lt; and &gt;`
  * made it possible to read a partial html page resulting from an "HTTP incomplete read" by 
    checking and adding on a missing `</html>` and/or `</body>`tag. If more then the tail part
    is missing it probably will later fail on your search. (Any tag with a missing clossing tag
