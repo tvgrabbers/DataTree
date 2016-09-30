@@ -31,9 +31,13 @@ but as this name is already taken in the Python library...
 With [version 1.2.4](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.2.4-p20160930)
  * implemented "text_replace" keyword to search and replace in the html data before importing
  * implemented "unquote_html" keyword to correct `", < and >` occurence in html data
- * made it possible to read a partial read html page by checking and adding on a missing `</html>` 
-   and/or `</body>`tag. (If more then the tail part is missing it probably will later fail on
-   your search.)
+ * made it possible to read a partial html page resulting from an "HTTP incomplete read" by 
+   checking and adding on a missing `</html>` and/or `</body>`tag. If more then the tail part
+   is missing it probably will later fail on your search. (Any tag with a missing clossing tag
+   is assumed to be auto-closing. This will, except on the enclosing `<html>` tag, prevent HTML
+   errors. However if the missing is inadvertently it can cause a change in the tree hierarchy, 
+   making the search, even when the data is present, fail. So this will only work if all the 
+   other higher closing tags are in the download.)
 
 With [version 1.2.3](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.2.3-p20160925)
  * implemented "url-relative-weekdays" keyword
