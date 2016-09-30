@@ -32,7 +32,8 @@ With [version 1.2.4](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.
  * implemented "text_replace" keyword to search and replace in the html data before importing
  * implemented "unquote_html" keyword to correct `", < and >` occurence in html data
  * made it possible to read a partial read html page by checking and adding on a missing `</html>` 
-   and or `</body>`tag
+   and/or `</body>`tag. (If more then the tail part is missing it probably will later fail on
+   your search.)
 
 With [version 1.2.3](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.2.3-p20160925)
  * implemented "url-relative-weekdays" keyword
@@ -56,29 +57,32 @@ With [version 1.1.4](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.
 
 With [version 1.1.3](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.1.3-p20160709)
  * More unified HTML and JSON parsing with added keywords "notchildkeys" and "tags",  
-renamed keyword "childkeys" and extended functionality for some of the others.  
-Also allowing to use a linked value in most cases.
+   renamed keyword "childkeys" and extended functionality for some of the others.  
+   Also allowing to use a linked value in most cases.
  * Added selection keyword "inclusive text" for HTML to include text in sub tags like  
-"i", "b" etc.
+   "i", "b" etc.
  * Added support for a tupple with multiple dtype values in the is_data_value function.
 
 With [version 1.1.2](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.1.2-p20160705)
  * A new warnings category for invalid data imports into a tree
  * A new search keyword "notattrs"
 
-With [version 1.1](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.1.1-p20160628) we have next to some patches added several new features:  
+With [version 1.1](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.1.1-p20160628) 
+we have next to some patches added several new features:  
  * Added support for 12 hour time values
  * Added the str-list type 
  * Added a warnings framework
  * Added a DataTreeShell class with pre and post processing functionality.
 
 It reads the page into a Node based tree, from which you, on the bases of a json  
-data-file, can extract your data into a list of items. For this a special [Data_def language](https://github.com/tvgrabbers/DataTree/wiki/data_def_language)  
+data-file, can extract your data into a list of items. For this a special 
+[Data_def language](https://github.com/tvgrabbers/DataTree/wiki/data_def_language)  
 has been developed. It can first extract a list of keyNodes and extract for each  
 of them the same data-list. During the extraction several data manipulation  
 functions are available.  
 
-Check [the WIKI](https://github.com/tvgrabbers/DataTree/wiki) for the syntax. Here a short list of possible keywords:      
+Check [the WIKI](https://github.com/tvgrabbers/DataTree/wiki) for the syntax. 
+Here a short incomplete list of possible keywords:      
 ###path-dict keywords:
  * "path": "all", "root", "parent"
  * "key":<name>
