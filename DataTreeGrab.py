@@ -2517,6 +2517,25 @@ class DataTreeShell():
             if init_start_node:
                 self.searchtree.find_start_node()
 
+    def print_datatree(self, data = None, fobj = None, from_start_node = False):
+        with self.tree_lock:
+            if self.searchtree == None and data == None:
+                self.warn('Nothing to print!', dtDataWarning, 4)
+                return
+
+            if data!= None:
+                self.init_data(data, from_start_node):
+
+            oldfobj = self.searchtree.fle
+            if fobj != None:
+                self.searchtree.fle = fobj
+
+            if from_start_node:
+                self.searchtree.start_node.print_tree()
+
+            else:
+                self.searchtree.root.print_tree()
+
     def extract_datalist(self, init_start_node = False):
         with self.tree_lock:
             if not isinstance(self.searchtree, DATAtree):
