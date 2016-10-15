@@ -53,7 +53,7 @@ except ImportError:
 dt_name = u'DataTreeGrab'
 dt_major = 1
 dt_minor = 2
-dt_patch = 4
+dt_patch = 5
 dt_patchdate = u'20160930'
 dt_alfa = False
 dt_beta = True
@@ -437,7 +437,7 @@ class DATAnode():
             nfound = node.match_node(node_def = d_def[0], link_values=link_values, only_check_validity = only_check_validity)
             if not only_check_validity and nfound:
                 if self.dtree.show_result:
-                    self.dtree.print_text(u'  found node %s; %s\n'.encode('utf-8', 'replace') % (node.print_node(), d_def[0]))
+                    self.dtree.print_text(u'    found node %s;\n%s' % (node.print_node(), node.print_node_def(d_def[0])))
 
             if (not only_check_validity and nfound) or (only_check_validity and nfound == None):
                 # If we found a match or it is not a node definition
@@ -456,7 +456,7 @@ class DATAnode():
                 # This is an end node, so we store link values to use on further searches
                 self.end_link_values = link_values
                 if self.dtree.show_result:
-                    self.dtree.print_text(u'    adding node %s\n'.encode('utf-8', 'replace') % (self.print_node()))
+                    self.dtree.print_text(u'  adding node %s' % (self.print_node()))
 
             if nm == None:
                 return fnodes
@@ -516,13 +516,12 @@ class DATAnode():
             self.link_value[node_def['link']] = lv
             if self.dtree.show_result:
                 if isinstance(lv, (str,unicode)):
-                    self.dtree.print_text(u'    saving link to node (="%s"): %s\n      %s\n'.encode('utf-8', 'replace') % \
-                        (lv, self.print_node(), node_def))
+                    self.dtree.print_text(u'  saving link to node (="%s"): %s\n      %s' % \
+                        (lv, self.print_node(), self.print_node_def(node_def)))
 
                 else:
-                    self.dtree.print_text(u'    saving link to node (=%s): %s\n      %s\n'.encode('utf-8', 'replace') % \
-                        (lv, self.print_node(), node_def))
-
+                    self.dtree.print_text(u'  saving link to node (=%s): %s\n      %s' % \
+                        (lv, self.print_node(), self.print_node_def(node_def)))
 
     def get_link(self, sub_def, link_values, ltype = None):
         # retrieve a stored link_value
@@ -681,8 +680,16 @@ class DATAnode():
         # Detailed in child class
         return u'%s = %s' % (self.level, self.find_value())
 
+    def print_node_def(self, node_def):
+        spc = self.dtree.get_leveltabs(self.level,4)
+        rstr = u'%snode_def: ' % spc
+        for k, v in node_def.items():
+            rstr = u'%s%s: %s\n%s          ' % (rstr, k, v, spc)
+
+        return rstr.rstrip('\n').rstrip()
+
     def print_tree(self):
-        sstr =u'%s%s\n' % (self.dtree.get_leveltabs(self.level,4), self.print_node(True))
+        sstr =u'%s%s' % (self.dtree.get_leveltabs(self.level,4), self.print_node(True))
         self.dtree.print_text(sstr)
         for n in self.children:
             n.print_tree()
@@ -891,7 +898,16 @@ class HTMLnode(DATAnode):
                 sv = self.get_attribute(node_def['name'][ 'attr'].lower())
 
         if sv != None:
-            return self.dtree.calc_value(sv, node_def['name'])
+            nv = self.dtree.calc_value(sv, node_def['name'])
+            if self.dtree.show_result:
+                if isinstance(nv, (str,unicode)):
+                    self.dtree.print_text(u'  storing name = "%s" from node: %s\n      %s' % \
+                        (nv, self.print_node(), self.print_node_def(node_def['name'])))
+
+                else:
+                    self.dtree.print_text(u'  storing name = %s from node: %s\n      %s' % \
+                        (nv, self.print_node(), self.print_node_def(node_def['name'])))
+            return nv
 
     def find_value(self, node_def = None):
         def add_child_text(child, depth, in_text = None, ex_text = None):
@@ -1162,7 +1178,16 @@ class JSONnode(DATAnode):
                     sv = self.value
 
         if sv != None:
-            return self.dtree.calc_value(sv, node_def[ 'name'])
+            nv = self.dtree.calc_value(sv, node_def['name'])
+            if self.dtree.show_result:
+                if isinstance(lv, (str,unicode)):
+                    self.dtree.print_text(u'  storing name = "%s" from node: %s\n      %s' % \
+                        (nv, self.print_node(), self.print_node_def(node_def['name'])))
+
+                else:
+                    self.dtree.print_text(u'  storing name = %s from node: %s\n      %s' % \
+                        (nv, self.print_node(), self.print_node_def(node_def['name'])))
+            return nv
 
     def find_value(self, node_def = None):
         if is_data_value('value', node_def):
@@ -1321,7 +1346,7 @@ class DATAtree():
                 return
 
             if self.print_searchtree:
-                self.print_text('The root Tree:\n')
+                self.print_text('The root Tree:')
                 self.start_node.print_tree()
 
             init_path = self.data_value(['data',"init-path"],list)
@@ -1414,7 +1439,7 @@ class DATAtree():
                 return
 
             if self.print_searchtree:
-                self.print_text('The %s Tree:\n' % self.start_node.print_node())
+                self.print_text('The %s Tree:' % self.start_node.print_node())
                 self.start_node.print_tree()
 
             self.result = []
@@ -1438,7 +1463,7 @@ class DATAtree():
                         continue
 
                     if self.show_result:
-                        self.fle.write('parsing keypath %s\n'.encode('utf-8') % (kp[0]))
+                        self.print_text(u'parsing keypath: %s' % (kp[0]))
 
                     self.key_list = self.start_node.get_children(path_def = kp)
                     for k in self.key_list:
@@ -1461,7 +1486,7 @@ class DATAtree():
                                 continue
 
                             if self.show_result:
-                                self.fle.write('parsing key %s %s\n'.encode('utf-8') % ( [k.find_value(kp[-1])], v[-1]))
+                                self.print_text(u'parsing key %s' % ( [k.find_value(kp[-1])]))
 
                             if self.extract_from_parent and isinstance(k.parent, DATAnode):
                                 dv = self.find_data_value(v, k.parent, link_values)
@@ -1835,7 +1860,11 @@ class DATAtree():
 
         return unicode(re.sub("&#?\w+;", fixup, text))
     def print_text(self, text):
-        self.fle.write(text.encode('utf-8', 'replace'))
+        if self.fle in (sys.stdout, sys.stderr):
+            self.fle.write(text.encode('utf-8', 'replace'))
+
+        else:
+            self.fle.write(u'%s\n' % text)
 
     def get_leveltabs(self, level, spaces=3):
         stab = u''
@@ -1946,7 +1975,7 @@ class HTMLtree(HTMLParser, DATAtree):
                 self.autoclose_tags.append(t)
 
             if self.print_tags:
-                self.print_text(u'%5.0f %5.0f %5.0f %s\n' % (c['start'], c['close'], c['auto'], t))
+                self.print_text(u'%5.0f %5.0f %5.0f %s' % (c['start'], c['close'], c['auto'], t))
 
     def handle_starttag(self, tag, attrs):
         if not tag in self.open_tags.keys():
@@ -1955,12 +1984,12 @@ class HTMLtree(HTMLParser, DATAtree):
         self.open_tags[tag] += 1
         if self.print_tags:
             if len(attrs) > 0:
-                self.print_text(u'%sstarting %s %s %s\n' % (self.get_leveltabs(self.current_node.level,2), self.current_node.level+1, tag, attrs[0]))
+                self.print_text(u'%sstarting %s %s %s' % (self.get_leveltabs(self.current_node.level,2), self.current_node.level+1, tag, attrs[0]))
                 for a in range(1, len(attrs)):
-                    self.print_text(u'%s        %s\n' % (self.get_leveltabs(self.current_node.level,2), attrs[a]))
+                    self.print_text(u'%s        %s' % (self.get_leveltabs(self.current_node.level,2), attrs[a]))
 
             else:
-                self.print_text(u'%sstarting %s %s\n' % (self.get_leveltabs(self.current_node.level,2), self.current_node.level,tag))
+                self.print_text(u'%sstarting %s %s' % (self.get_leveltabs(self.current_node.level,2), self.current_node.level,tag))
 
         node = HTMLnode(self, [tag.lower(), attrs], self.current_node)
         self.add_text()
@@ -1985,8 +2014,8 @@ class HTMLtree(HTMLParser, DATAtree):
         self.add_text()
         if self.print_tags:
             if self.current_node.text.strip() != '':
-                self.print_text(u'%s        %s\n' % (self.get_leveltabs(self.current_node.level-1,2), self.current_node.text.strip()))
-            self.print_text(u'%sclosing %s %s %s\n' % (self.get_leveltabs(self.current_node.level-1,2), self.current_node.level,tag, self.current_node.tag))
+                self.print_text(u'%s        %s' % (self.get_leveltabs(self.current_node.level-1,2), self.current_node.text.strip()))
+            self.print_text(u'%sclosing %s %s %s' % (self.get_leveltabs(self.current_node.level-1,2), self.current_node.level,tag, self.current_node.tag))
 
         self.last_node = self.current_node
         self.is_tail = True
@@ -2524,7 +2553,7 @@ class DataTreeShell():
                 return
 
             if data!= None:
-                self.init_data(data, from_start_node):
+                self.init_data(data, from_start_node)
 
             oldfobj = self.searchtree.fle
             if fobj != None:
@@ -2535,6 +2564,8 @@ class DataTreeShell():
 
             else:
                 self.searchtree.root.print_tree()
+
+            self.searchtree.fle = oldfobj
 
     def extract_datalist(self, init_start_node = False):
         with self.tree_lock:

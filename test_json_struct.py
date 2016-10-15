@@ -137,6 +137,7 @@ from DataTreeGrab import is_data_value, data_value, version
 class test_JSON():
     def __init__(self, encoding = 'utf-8', struct_file = None, struct_path = None):
         self.encoding = encoding
+        self.report_file = sys.stdout
         self.testfile = None
         self.base_type = []
         self.trep = {}
@@ -179,7 +180,11 @@ class test_JSON():
                 if not t[-1] == '\n':
                     t+= '\n'
 
-                sys.stdout.write(t.encode(self.encoding, 'replace'))
+                if self.report_file == sys.stdout:
+                    self.report_file.write(t.encode(self.encoding, 'replace'))
+
+                else:
+                    self.report_file.write(unicode(t))
 
     def init_error(self):
         self.errors = {}
@@ -749,6 +754,7 @@ class test_JSON():
         return mstruct
 
     def test_file(self, file_name, struct_name = None, report_level = -1):
+        self.found_data_defs = []
         self.file_struct = None
         j_file = self._open_file(file_name, 'r')
         if j_file == None:
@@ -839,7 +845,7 @@ class test_JSON():
         elif data_value('type', tstruct, str) in ('dict', 'numbered dict'):
             self.test_dict(tstruct, self.testfile)
 
-        return(self.report_errors(report_level))
+        self.report_errors(report_level)
 
     def test_struct_type(self, struct_name, testval):
         old_references = {}
@@ -1187,6 +1193,7 @@ class test_JSON():
             old_references['base-type'] = self.base_type[:]
             if is_data_value('base-type', struct, str):
                 if struct['base-type'] == "data_def":
+                    self.found_data_defs.append(struct_name[7:])
                     if not is_data_value('data-format', testval, str):
                         self.log(['\nWe cannot test the data_def at "%s" as "data-format" is not set\n' % vpath,
                             '  and we cannot determin whether it is "JSON" or "HTML"!\n'])
@@ -1197,6 +1204,14 @@ class test_JSON():
 
             if is_data_value('conditional-type', struct, dict) and isinstance(testval, dict):
                 if data_value(['conditional-type', 'key'], struct, str) in testval.keys():
+                    if data_value(['conditional-type', 'name'], struct, str) == "data_def":
+                        self.found_data_defs.append(struct_name[7:])
+                        if not is_data_value('data-format', testval, str):
+                            self.log(['\nWe cannot test the data_def at "%s" as "data-format" is not set\n' % vpath,
+                                '  and we cannot determin whether it is "JSON" or "HTML"!\n'])
+
+                            return False
+
                     self.base_type.append(data_value(['conditional-type', 'name'], struct, str))
 
             old_references['lists'] = deepcopy(self.lookup_lists)
@@ -1793,7 +1808,7 @@ class test_JSON():
                 txtheaders = {'Keep-Alive' : '300'}
                 url = 'https://raw.githubusercontent.com/tvgrabbers/sourcematching/master/json_struct'
                 url = '%s/%s.json' % (url, name)
-                self.log('  trying to download: "%s.json"\n' % name)
+                self.log('  Downloading "%s.json"...\n' % name)
                 fu = FetchURL(self, url, None, txtheaders, 'utf-8')
                 fu.start()
                 fu.join(11)
