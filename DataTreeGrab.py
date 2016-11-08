@@ -52,11 +52,11 @@ except ImportError:
 
 dt_name = u'DataTreeGrab'
 dt_major = 1
-dt_minor = 2
-dt_patch = 5
-dt_patchdate = u'20160930'
+dt_minor = 3
+dt_patch = 0
+dt_patchdate = u'20161109'
 dt_alfa = False
-dt_beta = True
+dt_beta = False
 _warnings = None
 
 __version__  = '%s.%s.%s' % (dt_major,'{:0>2}'.format(dt_minor),'{:0>2}'.format(dt_patch))
@@ -1227,9 +1227,12 @@ class DATAtree():
             self.print_searchtree = False
             self.show_result = False
             self.fle = output
+            self.show_progress = False
+            self.progress_queue = Queue()
             self.caller_id = caller_id
             self.extract_from_parent = False
             self.result = []
+            self.quit = False
             self.data_def = {}
             self.month_names = []
             self.weekdays = []
@@ -1466,7 +1469,19 @@ class DATAtree():
                         self.print_text(u'parsing keypath: %s' % (kp[0]))
 
                     self.key_list = self.start_node.get_children(path_def = kp)
+                    k_cnt = len(self.key_list)
+                    k_item = 0
+                    if self.show_progress:
+                        self.progress_queue.put((k_item, k_cnt))
+
                     for k in self.key_list:
+                        if self.quit:
+                            return
+
+                        k_item += 1
+                        if self.show_progress:
+                            self.progress_queue.put((k_item, k_cnt))
+
                         if not isinstance(k, DATAnode):
                             continue
 
