@@ -1,5 +1,6 @@
 # DataTreeGrab
 [Some examples](https://github.com/tvgrabbers/DataTree/wiki/examples)  
+[The latest stable release](https://github.com/tvgrabbers/DataTree/releases/latest)
 [Go to the WIKI](https://github.com/tvgrabbers/DataTree/wiki)  
 [Go to tvgrabpyAPI](https://github.com/tvgrabbers/tvgrabpyAPI)  
 [Go to tvgrabnlpy](https://github.com/tvgrabbers/tvgrabnlpy)  
