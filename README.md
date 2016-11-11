@@ -30,7 +30,7 @@ but as this name is already taken in the Python library...
    the aplication and so giving your users easy access to (automated) updates.
    
 ###Known issues
- * Adding warning rules to DataTreeShell prior to DataTree initialization will plase the 
+ * Adding warning rules to DataTreeShell prior to DataTree initialization will place the 
    general rule before those added rules
    
 ###Release notes
