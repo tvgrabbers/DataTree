@@ -32,6 +32,8 @@ but as this name is already taken in the Python library...
 ###Known issues
  * Adding warning rules to DataTreeShell prior to DataTree initialization will plase the 
    general rule before those added rules
+   
+###Release notes
 
 With [version 1.3.0](https://github.com/tvgrabbers/DataTree/releases/tag/stable-1.3.0) 9-11-2016
  * first not beta release
