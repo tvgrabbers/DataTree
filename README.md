@@ -16,7 +16,8 @@ but as this name is already taken in the Python library...
 ###Installation
 * Especially under Windows, make sure Python 2.7.9 or higher is installed 
 * Make sure the above mentioned Python 2 package is installed on your system
-* Download the latest release and unpack it into a directory
+* Download the [latest stable release](https://github.com/tvgrabbers/DataTree/releases/latest)
+  and unpack it into a directory
 * Run:
   * under Linux: `sudo ./setup.py install` from that directory
   * under Windows depending on how you installed Python:
