@@ -16,7 +16,8 @@ but as this name is already taken in the Python library...
 ###Installation
 * Especially under Windows, make sure Python 2.7.9 or higher is installed 
 * Make sure the above mentioned Python 2 package is installed on your system
-* Download the latest release and unpack it into a directory
+* Download the [latest stable release](https://github.com/tvgrabbers/DataTree/releases/latest)
+  and unpack it into a directory
 * Run:
   * under Linux: `sudo ./setup.py install` from that directory
   * under Windows depending on how you installed Python:
@@ -31,10 +32,15 @@ but as this name is already taken in the Python library...
    
 ###Known issues
  * Adding warning rules to DataTreeShell prior to DataTree initialization will place the 
-   general rule before those added rules
+   general rule before those added rules. Fixed in version 1.3.1.
    
 ###Release notes
 
+With [version 1.3.1](https://github.com/tvgrabbers/DataTree/releases/tag/stable-1.3.1) 19-11-2016
+ * With a fix on warning rules getting reset when DataTreeShell initializes The DATAtree
+ * Added error return codes to some of the functions.
+   See https://github.com/tvgrabbers/DataTree/wiki/The-Warning-Framework
+   
 With [version 1.3.0](https://github.com/tvgrabbers/DataTree/releases/tag/stable-1.3.0) 9-11-2016
  * first not beta release
  * added functionality to show progress while running the extract_datalist function in a 
