@@ -53,8 +53,8 @@ except ImportError:
 dt_name = u'DataTreeGrab'
 dt_major = 1
 dt_minor = 3
-dt_patch = 1
-dt_patchdate = u'20161118'
+dt_patch = 2
+dt_patchdate = u'20161127'
 dt_alfa = False
 dt_beta = False
 _warnings = None
@@ -165,7 +165,7 @@ def data_value(searchpath, searchtree, dtype = None, default = None):
     return searchtree
 # end data_value()
 
-def extend_list(base_list, extend_list, do_add_none = False):
+def extend_list(base_list, extend_list):
     if not isinstance(base_list, list):
         base_list = [base_list]
 
@@ -184,6 +184,7 @@ dtDataOK = 0
 dtDataInvalid = 1
 dtStartNodeInvalid = 2
 dtDataDefInvalid = 3
+dtNoData = 7
 dtFatalError = 7
 
 dtSortFailed = 8
@@ -200,7 +201,7 @@ dtErrorTexts = {
 4: 'Unknown State',
 5: 'Unknown State',
 6: 'Unknown State',
-7: 'Unknown State',
+7: 'No Data',
 8: 'Data sorting failed',
 16: 'The Unquote filter failed',
 32: 'The Textreplace filter failed',
@@ -1479,6 +1480,9 @@ class DATAtree():
 
             if not isinstance(self.start_node, DATAnode):
                 self.warn('Unable to search the tree. Invalid dataset!', dtDataWarning, 1)
+                if self.show_progress:
+                    self.progress_queue.put((0, 0))
+
                 return dtStartNodeInvalid
 
             if self.print_searchtree:
@@ -1496,6 +1500,9 @@ class DATAtree():
 
             else:
                 self.warn('No valid "data" keyword found in the "data_def": %s' % (data_def), dtParseWarning, 1)
+                if self.show_progress:
+                    self.progress_queue.put((0, 0))
+
                 return dtDataDefInvalid
 
             for dset in def_list:
@@ -1557,7 +1564,13 @@ class DATAtree():
                         else:
                             self.result.append(tlist)
 
-        return dtDataOK
+            if len(self.result) == 0:
+                if self.show_progress:
+                    self.progress_queue.put((0, 0))
+
+                return dtNoData
+
+            return dtDataOK
 
     def calc_value(self, value, node_def = None):
         def calc_warning(text, severity=4):
