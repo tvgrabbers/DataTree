@@ -36,6 +36,9 @@ but as this name is already taken in the Python library...
    
 ###Release notes
 
+With [version 1.3.2](https://github.com/tvgrabbers/DataTree/releases/tag/stable-1.3.2) 27-11-2016
+ * With a fix on missing signals on the extract_datalist function on an empty result
+
 With [version 1.3.1](https://github.com/tvgrabbers/DataTree/releases/tag/stable-1.3.1) 19-11-2016
  * With a fix on warning rules getting reset when DataTreeShell initializes The DATAtree
  * Added error return codes to some of the functions.
