@@ -895,7 +895,6 @@ class HTMLnode(DATAnode):
                             return False
 
         if is_data_value('notattrs', node_def, (dict, list)):
-        #~ if is_data_value('notattrs', node_def):
             ck = data_value('notattrs', node_def)
             if not is_data_value('notattrs', node_def, list):
                 ck = [ck]
@@ -2082,7 +2081,6 @@ class HTMLtree(HTMLParser, DATAtree):
         self.open_tags[tag] -= 1
         if self.current_node.tag != tag.lower():
             # To catch missing close tags
-            #~ self.remove_text()
             self.handle_endtag(self.current_node.tag)
 
         self.add_text()
@@ -2567,20 +2565,9 @@ class DataTreeShell():
                 dttype = 'html'
                 autoclose_tags = self.data_value(["autoclose-tags"], list)
                 # Cover for incomplete reads where the essentiel body part is retrieved
-                if u'<body>' in data and not u'</body>' in data:
-                    data = u'%s</body>' % data
-
-                if u'<BODY>' in data and not u'</BODY>' in data:
-                    data = u'%s</BODY>' % data
-
-                if u'<html>' in data and not u'</html>' in data:
-                    data = u'%s</html>' % data
-
-                if u'<HTML>' in data and not u'</HTML>' in data:
-                    data = u'%s</HTML>' % data
-
-                #~ # And in case of another enclosing tag with for instance xml
-                #~ starttag =re.search('^<(.*?)>', data.strip()).group(1)
+                for ctag in ('body', 'BODY', 'html', 'HTML', 'xml', 'XML'):
+                    if u'<%s>' % ctag in data and not u'</%s>' % ctag in data:
+                        data = u'%s</%s>' % (data, ctag)
 
                 if self.data_value(["enclose-with-html-tag"], bool, default=False):
                     data = u'<html>%s</html>' % data
@@ -2901,6 +2888,21 @@ class DataTreeShell():
                 else:
                     return unicode(data[0]).strip()
 
+            # strip data[1] from the start of data[0] if present and make sure it's unicode
+            elif fid == 1:
+                if not is_data_value(0, data, str):
+                    link_warning('Missing or invalid data value 0')
+                    if default != None:
+                        return default
+
+                    return u''
+
+                if is_data_value(1, data, str) and data[0].strip().lower()[:len(data[1])] == data[1].lower():
+                    return unicode(data[0][len(data[1]):]).strip()
+
+                else:
+                    return unicode(data[0]).strip()
+
             # concatenate stringparts and make sure it's unicode
             elif fid == 2:
                 dd = u''
@@ -3085,6 +3087,21 @@ class DataTreeShell():
 
                 link_warning('Item 1 not found in dict 0')
                 return default
+
+            # remove data[1] from the string in data[0] if present and make sure it's unicode
+            elif fid == 12:
+                if not is_data_value(0, data, str):
+                    link_warning('Missing or invalid data value 0')
+                    if default != None:
+                        return default
+
+                    return u''
+
+                if is_data_value(1, data, str) and data[1] in data[0]:
+                    re.sub('  ', ' ', re.sub(data[1], '', data[0]))
+
+                else:
+                    return unicode(data[0]).strip()
 
             else:
                 link_warning('Unknown link function',2)
