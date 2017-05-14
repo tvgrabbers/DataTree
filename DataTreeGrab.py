@@ -441,8 +441,12 @@ class DATAnode():
             self.value = None
             self.child_index = 0
             self.level = 0
-            self.link_value = {}
-            self.end_link_values = {}
+            self.links = {}
+            self.links["values"] = {}
+            self.links["nodes"] = {}
+            self.end_links = {}
+            self.end_links["values"] = {}
+            self.end_links["nodes"] = {}
 
             self.is_root = bool(self.parent == None)
             n = self
@@ -460,7 +464,7 @@ class DATAnode():
             node.child_index = len(self.children)
             self.children.append(node)
 
-    def get_children(self, path_def = None, link_values=None):
+    def get_children(self, path_def = None, links=None):
         """
         The basic function to walk through the Tree
         It first checks on the kind of node_def, extracting any name or link definition
@@ -468,12 +472,18 @@ class DATAnode():
         """
         nm = None
         d_def = path_def if isinstance(path_def, list) else [path_def]
-        if not isinstance(link_values, dict):
-            link_values = {}
+        if not isinstance(links, dict):
+            links = {"values": {},"nodes": {}}
+
+        if not is_data_value("values", links, dict):
+            links["values"] = {}
+
+        if not is_data_value("nodes", links, dict):
+            links["nodes"] = {}
 
         def match_node(node, only_check_validity = False):
             # check through the HTML/JSON specific functions
-            nfound = node.match_node(node_def = d_def[0], link_values=link_values, only_check_validity = only_check_validity)
+            nfound = node.match_node(node_def = d_def[0], links=links, only_check_validity = only_check_validity)
             if not only_check_validity and nfound:
                 if self.dtree.show_result:
                     self.dtree.print_text(u'    found node %s;\n%s' % (node.print_node(), node.print_node_def(d_def[0])))
@@ -481,11 +491,17 @@ class DATAnode():
             if (not only_check_validity and nfound) or (only_check_validity and nfound == None):
                 # If we found a match or it is not a node definition
                 # We retrieve any found links
-                if len(node.link_value) > 0:
-                    for k, v in node.link_value.items():
-                        link_values[k] = v
+                if len(node.links["values"]) > 0:
+                    for k, v in node.links["values"].items():
+                        links["values"][k] = v
 
-                node.link_value = {}
+                    node.links["values"] = {}
+
+                if len(node.links["nodes"]) > 0:
+                    for k, v in node.links["nodes"].items():
+                        links["nodes"][k] = v
+
+                    node.links["nodes"] = {}
 
             return nfound
 
@@ -493,7 +509,8 @@ class DATAnode():
             # Return the found nodes, adding if defined a name
             if fnodes == [self]:
                 # This is an end node, so we store link values to use on further searches
-                self.end_link_values = link_values
+                self.end_links["values"] = links["values"].copy()
+                self.end_links["nodes"] = links["nodes"].copy()
                 if self.dtree.show_result:
                     self.dtree.print_text(u'  adding node %s' % (self.print_node()))
 
@@ -518,26 +535,31 @@ class DATAnode():
 
             else:
                 # We'll check the next node_def,
-                return found_nodes(self.get_children(path_def = d_def[1:], link_values=link_values))
+                return found_nodes(self.get_children(path_def = d_def[1:], links=links))
 
         # Is there a path statement
         elif is_data_value('path', d_def[0]):
             sel_val = d_def[0]['path']
             if sel_val == 'parent' and not self.is_root:
                 if match_node(self.parent):
-                    return found_nodes(self.parent.get_children(path_def = d_def[1:], link_values=link_values))
+                    return found_nodes(self.parent.get_children(path_def = d_def[1:], links=links))
 
             elif sel_val == 'root':
                 if match_node(self.root):
-                    return found_nodes(self.root.get_children(path_def = d_def[1:], link_values=link_values))
+                    return found_nodes(self.root.get_children(path_def = d_def[1:], links=links))
 
             elif sel_val == 'all':
                 childs = []
                 for item in self.children:
                     if match_node(item):
-                        childs = extend_list(childs, item.get_children(path_def = d_def[1:], link_values=link_values))
+                        childs = extend_list(childs, item.get_children(path_def = d_def[1:], links=links))
 
                 return found_nodes(childs)
+
+            else:
+                if sel_val in links["nodes"].keys() and isinstance(links["nodes"][sel_val], DATAnode):
+                    if match_node(links["nodes"][sel_val]):
+                        return found_nodes(links["nodes"][sel_val].get_children(path_def = d_def[1:], links=links))
 
         else:
             childs = []
@@ -545,27 +567,33 @@ class DATAnode():
             for item in self.children:
                 if match_node(item):
                     # We found a matching child
-                    childs = extend_list(childs, item.get_children(path_def = d_def[1:], link_values=link_values))
+                    childs = extend_list(childs, item.get_children(path_def = d_def[1:], links=links))
 
             return found_nodes(childs)
 
     def check_for_linkrequest(self, node_def):
+        if is_data_value('node', node_def, int):
+            self.links["nodes"][node_def['node']] = self
+            if self.dtree.show_result:
+                self.dtree.print_text(u'    saving link to node: %s\n      %s' % \
+                    (self.print_node(), self.print_node_def(node_def)))
+
         if is_data_value('link', node_def, int):
             lv = self.find_value(node_def)
-            self.link_value[node_def['link']] = lv
+            self.links["values"][node_def['link']] = lv
             if self.dtree.show_result:
                 if isinstance(lv, (str,unicode)):
-                    self.dtree.print_text(u'  saving link to node (="%s"): %s\n      %s' % \
+                    self.dtree.print_text(u'    saving link to nodevalue (="%s"): %s\n      %s' % \
                         (lv, self.print_node(), self.print_node_def(node_def)))
 
                 else:
-                    self.dtree.print_text(u'  saving link to node (=%s): %s\n      %s' % \
+                    self.dtree.print_text(u'    saving link to nodevalue (=%s): %s\n      %s' % \
                         (lv, self.print_node(), self.print_node_def(node_def)))
 
     def get_link(self, sub_def, link_values, ltype = None):
         # retrieve a stored link_value
         if not is_data_value(data_value(['link'], sub_def, int), link_values):
-            self.dtree.warn('You requested a link, but link value %s is not stored!' % data_value(['link'], node_def, int), dtParseWarning, 2)
+            self.dtree.warn('You requested a link, but link value %s is not stored!' % data_value(['link'], sub_def, int), dtParseWarning, 2)
             return None
 
         il = link_values[data_value(['link'], sub_def, int)]
@@ -700,11 +728,12 @@ class DATAnode():
             return value
 
 
-    def match_node(self, node_def = None, link_values = None, only_check_validity = False):
+    def match_node(self, node_def = None, links = None, only_check_validity = False):
         # Return None if node_def is not a node definition then only collect any link request
         # Detailed in HTML/JSON class, return True on matching the node_def
         # Return False on failure to match
-        self.link_value = {}
+        self.links["values"] = {}
+        self.links["nodes"] = {}
         return False
 
     def find_name(self, node_def):
@@ -793,10 +822,16 @@ class HTMLnode(DATAnode):
 
         return childs
 
-    def match_node(self, tag = None, attributes = None, node_def = None, link_values=None, only_check_validity = False):
-        self.link_value = {}
-        if not isinstance(link_values, dict):
-            link_values ={}
+    def match_node(self, tag = None, attributes = None, node_def = None, links=None, only_check_validity = False):
+        self.links["values"] = {}
+        if not isinstance(links, dict):
+            links = {"values": {},"nodes": {}}
+
+        if not is_data_value("values", links, dict):
+            links["values"] = {}
+
+        if not is_data_value("nodes", links, dict):
+            links["nodes"] = {}
 
         if node_def == None:
             # It's not a selection through a node_def
@@ -820,9 +855,9 @@ class HTMLnode(DATAnode):
                 return False
 
         elif is_data_value('tag', node_def):
-            if self.get_value(node_def["tag"], link_values, 'tag', 'lower') in (None, self.tag.lower()):
+            if self.get_value(node_def["tag"], links["values"], 'tag', 'lower') in (None, self.tag.lower()):
                 # The tag matches
-                if not self.check_index(node_def, link_values) in (True, None):
+                if not self.check_index(node_def, links["values"]) in (True, None):
                     return False
 
             else:
@@ -830,9 +865,9 @@ class HTMLnode(DATAnode):
                 return False
 
         elif is_data_value('tags', node_def, list):
-            if self.tag.lower() in self.get_value_list(data_value('tags', node_def, list), link_values, 'tag', 'lower'):
+            if self.tag.lower() in self.get_value_list(data_value('tags', node_def, list), links["values"], 'tag', 'lower'):
                 # The tag matches
-                if not self.check_index(node_def, link_values) in (True, None):
+                if not self.check_index(node_def, links["values"]) in (True, None):
                     return False
 
             else:
@@ -840,7 +875,7 @@ class HTMLnode(DATAnode):
                 return False
 
         elif is_data_value('index', node_def):
-            if self.check_index(node_def, link_values) in (False, None):
+            if self.check_index(node_def, links["values"]) in (False, None):
                 return False
 
         elif not is_data_value('path', node_def):
@@ -852,7 +887,7 @@ class HTMLnode(DATAnode):
 
         for kw in ('text', 'tail'):
             if (is_data_value([kw,'link'], node_def, int) or is_data_value(kw, node_def, str)) \
-              and self.get_value(node_def[kw], link_values, kw, 'lower') != self.text.lower():
+              and self.get_value(node_def[kw], links["values"], kw, 'lower') != self.text.lower():
                 return False
 
         if is_data_value('attrs', node_def, (dict, list)):
@@ -871,7 +906,7 @@ class HTMLnode(DATAnode):
                             # but the attribute is not there
                             continue
 
-                        alist = self.get_value_list(data_value('not', v, list), link_values, 'attribute', 'str')
+                        alist = self.get_value_list(data_value('not', v, list), links["values"], 'attribute', 'str')
                         if len(alist) == 0:
                             # No values to exclude
                             continue
@@ -885,7 +920,7 @@ class HTMLnode(DATAnode):
                             # but the attribute is not there
                             return False
 
-                        alist = self.get_value_list(v, link_values, 'attribute', 'str')
+                        alist = self.get_value_list(v, links["values"], 'attribute', 'str')
                         if v == None or (len(alist) == 1 and alist[0] == None):
                             # All values are OK so continue
                             continue
@@ -905,7 +940,7 @@ class HTMLnode(DATAnode):
 
                 for a, v in cd.items():
                     if self.is_attribute(a):
-                        alist = self.get_value_list(v, link_values, 'notattrs', 'str')
+                        alist = self.get_value_list(v, links["values"], 'notattrs', 'str')
                         if v == None or (len(alist) == 1 and alist[0] == None):
                             # All values are OK so exclude
                             return False
@@ -1090,34 +1125,42 @@ class JSONnode(DATAnode):
 
         return None
 
-    def match_node(self, node_def = None, link_values = None, only_check_validity = False):
-        self.link_value = {}
-        if not isinstance(link_values, dict):
-            link_values ={}
+    def match_node(self, node_def = None, links = None, only_check_validity = False):
+        self.links["values"] = {}
+        if not isinstance(links, dict):
+            links = {"values": {},"nodes": {}}
+
+        if not is_data_value("values", links, dict):
+            links["values"] = {}
+
+        if not is_data_value("nodes", links, dict):
+            links["nodes"] = {}
 
         if is_data_value('key', node_def):
-            if is_data_value(['key','link'], node_def, int):
-                kl = self.get_link(data_value(['key'], node_def, dict), link_values)
+            #~ if is_data_value(['key','link'], node_def, int):
+                #~ kl = self.get_link(data_value(['key'], node_def, dict), links["values"])
 
-            else:
-                kl = node_def["key"]
+            #~ else:
+                #~ kl = node_def["key"]
 
-            if not self.key == kl:
+            #~ if not self.key == kl:
+            if self.get_value(node_def["key"], links["values"], 'key') != self.key:
                 # The requested key doesn't matches
                 return False
 
         elif is_data_value('keys', node_def, list):
-            klist = []
-            for index in range(len(data_value('keys', node_def, list))):
-                if is_data_value(['keys', index,'link'], node_def, int):
-                    klist.append(self.get_link(data_value(['keys', index], node_def, dict), link_values))
+            #~ klist = []
+            #~ for index in range(len(data_value('keys', node_def, list))):
+                #~ if is_data_value(['keys', index,'link'], node_def, int):
+                    #~ klist.append(self.get_link(data_value(['keys', index], node_def, dict), links["values"]))
 
-                else:
-                    klist.append(node_def['keys', index])
+                #~ else:
+                    #~ klist.append(node_def['keys', index])
 
-            if self.key in klist:
+            #~ if self.key in klist:
+            if self.key in self.get_value_list(data_value('keys', node_def, list), links["values"], 'key'):
                 # This key is in the list with requested keys
-                if not self.check_index(node_def, link_values) in (True, None):
+                if not self.check_index(node_def, links["values"]) in (True, None):
                     return False
 
             else:
@@ -1125,7 +1168,7 @@ class JSONnode(DATAnode):
                 return False
 
         elif is_data_value('index', node_def):
-            if self.check_index(node_def, link_values) in (False, None):
+            if self.check_index(node_def, links["values"]) in (False, None):
                 return False
 
         elif not is_data_value('path', node_def):
@@ -1157,7 +1200,7 @@ class JSONnode(DATAnode):
                             # but the childkey is not there
                             continue
 
-                        alist = self.get_value_list(data_value('not', v, list), link_values, 'childkeys')
+                        alist = self.get_value_list(data_value('not', v, list), links["values"], 'childkeys')
                         if len(alist) == 0:
                             # No values to exclude
                             continue
@@ -1171,7 +1214,7 @@ class JSONnode(DATAnode):
                             # but the childkey is not there
                             return False
 
-                        alist = self.get_value_list(v, link_values, 'childkeys')
+                        alist = self.get_value_list(v, links["values"], 'childkeys')
                         if v == None or (len(alist) == 1 and alist[0] == None):
                             # All values are OK so continue
                             continue
@@ -1191,7 +1234,7 @@ class JSONnode(DATAnode):
 
                 for k, v in cd.items():
                     if k in self.keys:
-                        alist = self.get_value_list(v, link_values, 'notchildkeys')
+                        alist = self.get_value_list(v, links["values"], 'notchildkeys')
                         if v == None or (len(alist) == 1 and alist[0] == None):
                             # All values are OK so exclude
                             return False
@@ -1394,7 +1437,8 @@ class DATAtree():
             if self.show_result:
                 self.print_text(self.root.print_node())
 
-            sn = self.root.get_children(path_def = init_path)
+            links = {"values": {},"nodes": {}}
+            sn = self.root.get_children(path_def = init_path, links = links)
             if sn == None or len(sn) == 0 or not isinstance(sn[0], DATAnode):
                 self.warn('"init-path": %s did not result in a valid node. Falling back to the rootnode' % (init_path), dtParseWarning, 2)
                 self.start_node = self.root
@@ -1404,7 +1448,7 @@ class DATAtree():
                 self.start_node = sn[0]
                 return dtDataOK
 
-    def find_data_value(self, path_def, start_node = None, link_values = None):
+    def find_data_value(self, path_def, start_node = None, links = None):
         with self.tree_lock:
             if not isinstance(path_def, (list, tuple)) or len(path_def) == 0:
                 self.warn('Invalid "path_def": %s supplied to "find_data_value"' % (path_def), dtParseWarning, 1)
@@ -1417,7 +1461,8 @@ class DATAtree():
                 self.warn('Unable to search the tree. Invalid dataset!', dtDataWarning, 1)
                 return
 
-            nlist = start_node.get_children(path_def = path_def, link_values = link_values)
+            links = {"values": {},"nodes": {}} if links == None else links
+            nlist = start_node.get_children(path_def = path_def, links = links)
             if data_value('select', path_def[-1], str) == 'presence':
                 # We return True if exactly one node is found, else False
                 return bool(isinstance(nlist, DATAnode) or (isinstance(nlist, list) and len(nlist) == 1 and  isinstance(nlist[0], DATAnode)))
@@ -1473,6 +1518,7 @@ class DATAtree():
                 return nlist.find_value(path_def[-1])
 
     def extract_datalist(self, data_def=None):
+        print "extracting datalist"
         with self.tree_lock:
             if isinstance(data_def, dict):
                 self.data_def = data_def
@@ -1490,12 +1536,42 @@ class DATAtree():
 
             self.result = []
             # Are there multiple data definitions
+            def_list = []
             if self.is_data_value(['data',"iter"],list):
-                def_list = self.data_value(['data','iter'],list)
+                for def_item in self.data_value(['data','iter'],list):
+                    if not isinstance(def_item, dict):
+                        continue
+
+                    dset = {}
+                    dset["key-path"] = []
+                    dset[""] = []
+                    if is_data_value("key-path", def_item, list):
+                        dset["key-path"] = def_item["key-path"]
+
+                    if is_data_value("values2", def_item, list):
+                        dset["values"] = def_item["values2"]
+
+                    elif is_data_value("values", def_item, list):
+                        dset["values"] = def_item["values"]
+
+                    def_list.append(dset)
 
             # Or just one
             elif self.is_data_value('data',dict):
-                def_list = [self.data_value('data',dict)]
+                def_item = self.data_value('data',dict)
+                dset = {}
+                dset["key-path"] = []
+                dset[""] = []
+                if is_data_value("key-path", def_item, list):
+                    dset["key-path"] = def_item["key-path"]
+
+                if is_data_value("values2", def_item, list):
+                    dset["values"] = def_item["values2"]
+
+                elif is_data_value("values", def_item, list):
+                    dset["values"] = def_item["values"]
+
+                def_list.append(dset)
 
             else:
                 self.warn('No valid "data" keyword found in the "data_def": %s' % (data_def), dtParseWarning, 1)
@@ -1514,7 +1590,8 @@ class DATAtree():
                     if self.show_result:
                         self.print_text(u'parsing keypath: %s' % (kp[0]))
 
-                    self.key_list = self.start_node.get_children(path_def = kp)
+                    links = {"values": {},"nodes": {}}
+                    self.key_list = self.start_node.get_children(path_def = kp, links = links)
                     k_cnt = len(self.key_list)
                     k_item = 0
                     if self.show_progress:
@@ -1531,12 +1608,10 @@ class DATAtree():
                         if not isinstance(k, DATAnode):
                             continue
 
-                        # And if it's a valid node, find the belonging values (the last dict in a path list contains the value definition)
+                        # And if it's a valid node, find the belonging end_links
+                        # and value (the last dict in a path list contains the value definition)
+                        links = k.end_links
                         tlist = [k.find_value(kp[-1])]
-                        link_values = {}
-                        if is_data_value('link', kp[-1], int):
-                            link_values = {kp[-1]["link"]: k.find_value(kp[-1])}
-
                         for v in data_value(["values"], dset, list):
                             if not isinstance(v, list) or len(v) == 0:
                                 tlist.append(None)
@@ -1550,10 +1625,10 @@ class DATAtree():
                                 self.print_text(u'parsing key %s' % ( [k.find_value(kp[-1])]))
 
                             if self.extract_from_parent and isinstance(k.parent, DATAnode):
-                                dv = self.find_data_value(v, k.parent, link_values)
+                                dv = self.find_data_value(v, k.parent, links)
 
                             else:
-                                dv = self.find_data_value(v, k, link_values)
+                                dv = self.find_data_value(v, k, links)
 
                             if isinstance(dv, NULLnode):
                                 break
@@ -1576,7 +1651,6 @@ class DATAtree():
             self.warn('%s calculation Error on value: "%s"\n   Using node_def: %s' % (text, value, node_def), dtCalcWarning, severity, 3)
 
         if isinstance(value, (str, unicode)):
-            # Is there something to strip of
             if is_data_value('lower',  node_def):
                 value = unicode(value).lower().strip()
 
@@ -1595,6 +1669,7 @@ class DATAtree():
                 value = value.encode('ascii','replace')
                 value = re.sub('\?', arep[0], value)
 
+            # Is there something to strip of
             if is_data_value('lstrip', node_def, str):
                 if value.strip().lower()[:len(node_def['lstrip'])] == node_def['lstrip'].lower():
                     value = unicode(value[len(node_def['lstrip']):]).strip()
