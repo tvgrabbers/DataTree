@@ -54,7 +54,7 @@ dt_name = u'DataTreeGrab'
 dt_major = 1
 dt_minor = 3
 dt_patch = 3
-dt_patchdate = u'20170516'
+dt_patchdate = u'20170517'
 dt_alfa = False
 dt_beta = False
 _warnings = None
@@ -513,6 +513,14 @@ class DATAnode():
                 self.end_links["nodes"] = links["nodes"].copy()
                 if self.dtree.show_result:
                     self.dtree.print_text(u'  adding node %s' % (self.print_node()))
+
+            if is_data_value([0, 'first'], d_def) and isinstance(fnodes, list):
+                # There is a request to only return the first
+                fnodes = [fnodes[0]]
+
+            elif is_data_value([0, 'last'], d_def) and isinstance(fnodes, list):
+                # There is a request to only return the last
+                fnodes = [fnodes[-1]]
 
             if nm == None:
                 return fnodes
@@ -1138,27 +1146,11 @@ class JSONnode(DATAnode):
             links["nodes"] = {}
 
         if is_data_value('key', node_def):
-            #~ if is_data_value(['key','link'], node_def, int):
-                #~ kl = self.get_link(data_value(['key'], node_def, dict), links["values"])
-
-            #~ else:
-                #~ kl = node_def["key"]
-
-            #~ if not self.key == kl:
             if self.get_value(node_def["key"], links["values"], 'key') != self.key:
                 # The requested key doesn't matches
                 return False
 
         elif is_data_value('keys', node_def, list):
-            #~ klist = []
-            #~ for index in range(len(data_value('keys', node_def, list))):
-                #~ if is_data_value(['keys', index,'link'], node_def, int):
-                    #~ klist.append(self.get_link(data_value(['keys', index], node_def, dict), links["values"]))
-
-                #~ else:
-                    #~ klist.append(node_def['keys', index])
-
-            #~ if self.key in klist:
             if self.key in self.get_value_list(data_value('keys', node_def, list), links["values"], 'key'):
                 # This key is in the list with requested keys
                 if not self.check_index(node_def, links["values"]) in (True, None):
@@ -1478,14 +1470,6 @@ class DATAtree():
 
                 else:
                     return data_value('default', path_def[-1])
-
-            if is_data_value('first', path_def[-1]) and isinstance(nlist, list):
-                # There is a request to only return the first
-                nlist = nlist[0]
-
-            elif is_data_value('last', path_def[-1]) and isinstance(nlist, list):
-                # There is a request to only return the last
-                nlist = nlist[-1]
 
             # We found multiple values
             if (isinstance(nlist, list) and len(nlist) > 1) or (data_value('type', path_def[-1]) == 'list'):
