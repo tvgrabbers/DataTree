@@ -53,8 +53,8 @@ except ImportError:
 dt_name = u'DataTreeGrab'
 dt_major = 1
 dt_minor = 3
-dt_patch = 2
-dt_patchdate = u'20161127'
+dt_patch = 3
+dt_patchdate = u'20170516'
 dt_alfa = False
 dt_beta = False
 _warnings = None
@@ -540,13 +540,9 @@ class DATAnode():
         # Is there a path statement
         elif is_data_value('path', d_def[0]):
             sel_val = d_def[0]['path']
-            if sel_val == 'parent' and not self.is_root:
-                if match_node(self.parent):
-                    return found_nodes(self.parent.get_children(path_def = d_def[1:], links=links))
-
-            elif sel_val == 'root':
-                if match_node(self.root):
-                    return found_nodes(self.root.get_children(path_def = d_def[1:], links=links))
+            if sel_val in links["nodes"].keys() and isinstance(links["nodes"][sel_val], DATAnode):
+                if match_node(links["nodes"][sel_val]):
+                    return found_nodes(links["nodes"][sel_val].get_children(path_def = d_def[1:], links=links))
 
             elif sel_val == 'all':
                 childs = []
@@ -556,10 +552,13 @@ class DATAnode():
 
                 return found_nodes(childs)
 
-            else:
-                if sel_val in links["nodes"].keys() and isinstance(links["nodes"][sel_val], DATAnode):
-                    if match_node(links["nodes"][sel_val]):
-                        return found_nodes(links["nodes"][sel_val].get_children(path_def = d_def[1:], links=links))
+            elif sel_val == 'root':
+                if match_node(self.root):
+                    return found_nodes(self.root.get_children(path_def = d_def[1:], links=links))
+
+            elif sel_val == 'parent' and not self.is_root:
+                if match_node(self.parent):
+                    return found_nodes(self.parent.get_children(path_def = d_def[1:], links=links))
 
         else:
             childs = []
@@ -570,6 +569,8 @@ class DATAnode():
                     childs = extend_list(childs, item.get_children(path_def = d_def[1:], links=links))
 
             return found_nodes(childs)
+
+        return []
 
     def check_for_linkrequest(self, node_def):
         if is_data_value('node', node_def, int):
@@ -645,11 +646,11 @@ class DATAnode():
                 if self.child_index < il:
                     return True
 
-            if is_data_value(['index','next'], node_def):
+            elif is_data_value(['index','next'], node_def):
                 if self.child_index > il:
                     return True
 
-            if self.child_index == il:
+            elif self.child_index == il:
                 return True
 
         elif is_data_value(['index'], node_def, int):
@@ -1450,9 +1451,12 @@ class DATAtree():
 
     def find_data_value(self, path_def, start_node = None, links = None):
         with self.tree_lock:
-            if not isinstance(path_def, (list, tuple)) or len(path_def) == 0:
+            if not isinstance(path_def, (list, tuple)):
                 self.warn('Invalid "path_def": %s supplied to "find_data_value"' % (path_def), dtParseWarning, 1)
                 return
+
+            if len(path_def) == 0:
+                path_def = [{}]
 
             if start_node == None or not isinstance(start_node, DATAnode):
                 start_node = self.start_node
@@ -1518,7 +1522,6 @@ class DATAtree():
                 return nlist.find_value(path_def[-1])
 
     def extract_datalist(self, data_def=None):
-        print "extracting datalist"
         with self.tree_lock:
             if isinstance(data_def, dict):
                 self.data_def = data_def
@@ -1624,11 +1627,39 @@ class DATAtree():
                             if self.show_result:
                                 self.print_text(u'parsing key %s' % ( [k.find_value(kp[-1])]))
 
-                            if self.extract_from_parent and isinstance(k.parent, DATAnode):
-                                dv = self.find_data_value(v, k.parent, links)
+                            pv = data_value('path', v[0])
+                            if pv in links["nodes"].keys() or pv in ("root", "parent"):
+                                dt = []
+                                if len(v[0]) > 1:
+                                    dt = [{}]
+                                    for n, nd in v[0].items():
+                                        if n != "path":
+                                            dt[0][n] = nd
+
+                                dt.extend(v[1:])
 
                             else:
-                                dv = self.find_data_value(v, k, links)
+                                dt = v
+
+                            if pv in links["nodes"].keys():
+                                kn = links["nodes"][pv]
+
+                            elif pv == "root":
+                                kn = self.root
+
+                            elif pv == "parent" and self.extract_from_parent and isinstance(k.parent.parent, DATAnode):
+                                kn = k.parent.parent
+
+                            elif pv == "parent" and isinstance(k.parent, DATAnode):
+                                kn = k.parent
+
+                            elif self.extract_from_parent and isinstance(k.parent, DATAnode):
+                                kn = k.parent
+
+                            else:
+                                kn = k
+
+                            dv = self.find_data_value(dt, kn, links)
 
                             if isinstance(dv, NULLnode):
                                 break
