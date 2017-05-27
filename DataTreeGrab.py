@@ -59,6 +59,37 @@ dt_alfa = False
 dt_beta = False
 _warnings = None
 
+# DataTreeShell errorcodes
+dtQuiting = -1
+dtDataOK = 0
+dtDataInvalid = 1
+dtStartNodeInvalid = 2
+dtDataDefInvalid = 3
+dtNoData = 7
+dtFatalError = 7
+
+dtSortFailed = 8
+dtUnquoteFailed = 16
+dtTextReplaceFailed = 32
+dtTimeZoneFailed = 64
+dtCurrentDateFailed = 128
+dtErrorTexts = {
+-1: 'The execution was aborted',
+0: 'Data OK',
+1: 'Invalid dataset!',
+2: 'Invalid startnode!',
+3: 'Invalid data_def',
+4: 'Unknown State',
+5: 'Unknown State',
+6: 'Unknown State',
+7: 'No Data',
+8: 'Data sorting failed',
+16: 'The Unquote filter failed',
+32: 'The Textreplace filter failed',
+64: 'Timezone initialization failed',
+128: 'Setting the current date failed'
+}
+
 __version__  = '%s.%s.%s' % (dt_major,'{:0>2}'.format(dt_minor),'{:0>2}'.format(dt_patch))
 if dt_alfa:
     __version__ = '%s-alfa' % (__version__)
@@ -90,7 +121,7 @@ def is_data_value(searchpath, searchtree, dtype = None, empty_is_false = False):
                 return False
 
         elif isinstance(searchtree, (list, tuple)):
-            if (not isinstance(d, int) or d >= len(searchtree)):
+            if (not isinstance(d, int) or (d >= 0 and d >= len(searchtree)) or (d < 0 and -d > len(searchtree))):
                 return False
 
         else:
@@ -177,37 +208,6 @@ def extend_list(base_list, extend_list):
 
     return base_list
 # end extend_list()
-
-# DataTreeShell errorcodes
-dtQuiting = -1
-dtDataOK = 0
-dtDataInvalid = 1
-dtStartNodeInvalid = 2
-dtDataDefInvalid = 3
-dtNoData = 7
-dtFatalError = 7
-
-dtSortFailed = 8
-dtUnquoteFailed = 16
-dtTextReplaceFailed = 32
-dtTimeZoneFailed = 64
-dtCurrentDateFailed = 128
-dtErrorTexts = {
--1: 'The execution was aborted',
-0: 'Data OK',
-1: 'Invalid dataset!',
-2: 'Invalid startnode!',
-3: 'Invalid data_def',
-4: 'Unknown State',
-5: 'Unknown State',
-6: 'Unknown State',
-7: 'No Data',
-8: 'Data sorting failed',
-16: 'The Unquote filter failed',
-32: 'The Textreplace filter failed',
-64: 'Timezone initialization failed',
-128: 'Setting the current date failed'
-}
 
 class dtWarning(UserWarning):
     # The root of all DataTreeGrab warnings.
@@ -1729,7 +1729,8 @@ class DATAtree():
                     except:
                         calc_warning('split')
 
-        if is_data_value('multiplier', node_def, int) and not data_value('type', node_def, unicode) in ('timestamp', 'datestamp'):
+        if is_data_value('multiplier', node_def, int) and \
+            not data_value('type', node_def, unicode) in ('timestamp', 'datestamp'):
 
             try:
                 value = int(value) * node_def['multiplier']
@@ -1967,7 +1968,7 @@ class DATAtree():
                         calc_warning('str-list type')
 
                 elif node_def['type'] == 'list':
-                    # this is handled in find_data_value to prefent double listing
+                    # this is handled in find_data_value to prevent double listing
                     pass
 
                 elif node_def['type'] == '':
@@ -3134,13 +3135,16 @@ class DataTreeShell():
                     data[0] = [data[0]]
 
                 for index in range(len(data[0])):
-                    data[0][index] = data[0][index].lower().strip()
+                    if isinstance(data[0][index], (str, unicode)):
+                        data[0][index] = data[0][index].lower().strip()
 
                 if not isinstance(data[1], (list,tuple)):
                     data[1] = [data[1]]
 
-                if data[2].lower().strip() in data[0]:
-                    index = data[0].index(data[2].lower().strip())
+                sd = data[2].lower().strip() if isinstance(data[2], (str, unicode)) else data[2]:
+
+                if sd in data[0]:
+                    index = data[0].index(sd)
                     if index < len(data[1]):
                         return data[1][index]
 
@@ -3164,16 +3168,19 @@ class DataTreeShell():
 
                 if is_data_value(0, data, list):
                     for item in data[1]:
+                        if isinstance(item, (str,unicode)):
+                            item = item.lower()
+
                         for sitem in data[0]:
                             if isinstance(sitem, dict):
-                                if item.lower() in sitem.keys():
-                                    if isinstance(sitem[item.lower()], (list, tuple)) and len(sitem[item.lower()]) == 0:
+                                if item in sitem.keys():
+                                    if isinstance(sitem[item], (list, tuple)) and len(sitem[item]) == 0:
                                         continue
 
-                                    if isinstance(sitem[item.lower()], (list, tuple)) and len(sitem[item.lower()]) == 1:
-                                        return sitem[item.lower()][0]
+                                    if isinstance(sitem[item], (list, tuple)) and len(sitem[item]) == 1:
+                                        return sitem[item][0]
 
-                                    return sitem[item.lower()]
+                                    return sitem[item]
 
                 link_warning('Item 1 not found in dict 0')
                 return default
