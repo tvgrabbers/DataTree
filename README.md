@@ -9,11 +9,11 @@ Spin-off python module for extracting structured data from HTML and JSON pages.
 It is at the heart of the tv_grab_py_API and was initially named just DataTree,  
 but as this name is already taken in the Python library...
 
-###Requirements
+### Requirements
  * Python 2.7.9 or higher (currently not python 3.x)
  * The [pytz module](http://pypi.python.org/pypi/pytz)
 
-###Installation
+### Installation
 * Especially under Windows, make sure Python 2.7.9 or higher is installed 
 * Make sure the above mentioned Python 2 package is installed on your system
 * Download the [latest stable release](https://github.com/tvgrabbers/DataTree/releases/latest)
@@ -24,17 +24,23 @@ but as this name is already taken in the Python library...
     * `setup.py install` from that directory
     * Or: `Python setup.py install` from that directory
 
-###Main advantages
+### Main advantages
  * It gives you a highly dependable dataset from a potentially changable source.
  * You can easily update on changes in the source without touching your code.
  * You can make the data_def available on a central location while distributing  
    the aplication and so giving your users easy access to (automated) updates.
    
-###Known issues
+### Known issues
  * Adding warning rules to DataTreeShell prior to DataTree initialization will place the 
    general rule before those added rules. Fixed in version 1.3.1.
    
-###Release notes
+### Release notes
+
+With [version 1.3.3](https://github.com/tvgrabbers/DataTree/releases/tag/stable-1.3.3) 17-05-2017
+ * with the introduction of the "node" keyword to store references to nodes, significant speed
+   increase of some 30% can be achieved. It does need adaptations to existing data_defs.
+   The "values2" keyword is introduced as an alternative set of value_defs. leaving the original set
+   for backward compatibility.
 
 With [version 1.3.2](https://github.com/tvgrabbers/DataTree/releases/tag/stable-1.3.2) 27-11-2016
  * With a fix on missing signals on the extract_datalist function on an empty result
@@ -114,7 +120,7 @@ functions are available.
 
 Check [the WIKI](https://github.com/tvgrabbers/DataTree/wiki) for the syntax. 
 Here a short incomplete list of possible keywords:      
-###path-dict keywords:
+### path-dict keywords:
  * "path": "all", "root", "parent"
  * "key":<name>
  * "keys":{"<name>":{"link":1},"<name>":""} (selection on child presence)
@@ -122,13 +128,13 @@ Here a short incomplete list of possible keywords:
  * "attrs":{"<name>":{"link":1},"<name>":{"not":[]},"<name>":"","<name>":null}
  * "index":{"link":1}
 
-###selection-keywords:
+### selection-keywords:
  * "select": "key", "text", "tag", "index", "value"
  * "attr":"<name>"
  * "link":1		(create a link)
  * "link-index":1		(create a link)
 
-###link examples
+### link examples
 ```
 [{"key":"abstract_key", "link":1},
         "root",{"key":"library"},"all",{"key":"abstracts"},
@@ -139,7 +145,7 @@ Here a short incomplete list of possible keywords:
 
         [...,{"tag":"img", "attrs":{"class": {"link":1}},"attr":"src"}],
 ```
-###selection-format keywords:
+### selection-format keywords:
  * "lower","upper","capitalize"
  * "ascii-replace":["ss","s", "[-!?(), ]"]
  * "lstrip", "rstrip":"')"
