@@ -53,8 +53,8 @@ except ImportError:
 dt_name = u'DataTreeGrab'
 dt_major = 1
 dt_minor = 3
-dt_patch = 3
-dt_patchdate = u'20170517'
+dt_patch = 4
+dt_patchdate = u'20170618'
 dt_alfa = False
 dt_beta = False
 _warnings = None
@@ -514,11 +514,11 @@ class DATAnode():
                 if self.dtree.show_result:
                     self.dtree.print_text(u'  adding node %s' % (self.print_node()))
 
-            if is_data_value([0, 'first'], d_def) and isinstance(fnodes, list):
+            if is_data_value([0, 'first'], d_def) and isinstance(fnodes, list) and len(fnodes) > 1:
                 # There is a request to only return the first
                 fnodes = [fnodes[0]]
 
-            elif is_data_value([0, 'last'], d_def) and isinstance(fnodes, list):
+            elif is_data_value([0, 'last'], d_def) and isinstance(fnodes, list) and len(fnodes) > 1:
                 # There is a request to only return the last
                 fnodes = [fnodes[-1]]
 
@@ -3141,7 +3141,7 @@ class DataTreeShell():
                 if not isinstance(data[1], (list,tuple)):
                     data[1] = [data[1]]
 
-                sd = data[2].lower().strip() if isinstance(data[2], (str, unicode)) else data[2]:
+                sd = data[2].lower().strip() if isinstance(data[2], (str, unicode)) else data[2]
 
                 if sd in data[0]:
                     index = data[0].index(sd)
