@@ -36,7 +36,7 @@ but as this name is already taken in the Python library...
    
 ### Release notes
 
-With [version 1.4.0 Beta](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.4.0-p20170525) 25-06-2017  
+With [version 1.4.0 Beta](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.4.0-p20170625) 25-06-2017  
  * Introducing a pre-conversion of the data_def to a more machine friendly and thus faster format.
    During conversion the data_defs are validated and any defaults are filled-in. Because of this
    a lot of validation code during parsing could be removed, introducing more speed increasement.
