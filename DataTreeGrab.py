@@ -238,10 +238,10 @@ dtlinkPos = {
 
 __version__  = '%s.%s.%s' % (dt_major,'{:0>2}'.format(dt_minor),'{:0>2}'.format(dt_patch))
 if dt_alfa:
-    __version__ = '%s-alfa' % (__version__)
+    __version__ = '%s-alfa' % (__version__, )
 
 elif dt_beta:
-    __version__ = '%s-beta' % (__version__)
+    __version__ = '%s-beta' % (__version__, )
 
 def version():
     return (dt_name, dt_major, dt_minor, dt_patch, dt_patchdate, dt_beta, dt_alfa)
@@ -604,7 +604,7 @@ class DataDef_Convert():
             if is_data_value("link",lvalue, int):
                 if not lvalue["link"] in self.link_list["values"]:
                     self.errorcode |= (dtInvalidValueLink + dtDataDefInvalid)
-                    self.warn('LinkID: %s is not jet stored' % ( lvalue["link"]), dtConversionWarning, 1, 3)
+                    self.warn('LinkID: %s is not jet stored' % ( lvalue["link"], ), dtConversionWarning, 1, 3)
                     return (dtvalValue,None,0)
 
                 val = [dtvalLink, lvalue["link"], 0]
@@ -901,7 +901,7 @@ class DataDef_Convert():
             if not isinstance(path_def, (list, tuple)):
                 self.errorcode |= dtInvalidPathDef
                 self.warn('An invalid path_def "%s" was encountered. It must be a list.' % \
-                    ( path_def), dtConversionWarning, 1)
+                    ( path_def, ), dtConversionWarning, 1)
                 return tuple()
 
             pd = []
@@ -938,7 +938,7 @@ class DataDef_Convert():
                     else:
                         if not inode["path"] in self.link_list["nodes"]:
                             self.errorcode |= (dtInvalidNodeLink + dtDataDefInvalid)
-                            self.warn('NodeID: %s is not jet stored' % ( inode["path"]), dtConversionWarning, 1)
+                            self.warn('NodeID: %s is not jet stored' % ( inode["path"], ), dtConversionWarning, 1)
                             continue
 
                         sel_node[1] = dtselPathLink
@@ -1047,9 +1047,8 @@ class DataDef_Convert():
                 return check_extras([dtlinkVarID, (ldict["varid"], )], ldict, key)
 
             elif ldict["varid"] > maxid:
-                self.warn('Requested datavalue ID "%s" in the "%s" link statement\n' + \
-                    ' is higher then the number of value_defs suplied'% \
-                    (ldict["varid"], key), dtConversionWarning, 2, 3)
+                self.warn('Requested datavalue ID "%s" in the "%s" link statement\n'% (ldict["varid"], key) + \
+                    ' is higher then the number of value_defs suplied', dtConversionWarning, 2, 3)
 
             elif ldict["varid"] <0 :
                 self.warn('Requested datavalue ID "%s" in the "%s" link statement is Negative!'% \
@@ -1208,7 +1207,7 @@ class DataDef_Convert():
                 self.cdata_def["tz"] = pytz.timezone(self.cdata_def["timezone"])
 
             except:
-                self.warn('Invalid timezone definition: %s' % (self.data_value(["timezone"])), dtConversionWarning, 2)
+                self.warn('Invalid timezone definition: %s' % (self.data_value(["timezone"]), ), dtConversionWarning, 2)
                 self.cdata_def["timezone"] = 'utc'
                 self.cdata_def["tz"] = pytz.utc
 
@@ -1227,7 +1226,7 @@ class DataDef_Convert():
                     for u_part in self.data_value("url", list):
                         uval = _get_url_part(u_part)
                         if uval == None:
-                            self.warn('Invalid url_part definition: %s' % (u_part), dtConversionWarning, 2)
+                            self.warn('Invalid url_part definition: %s' % (u_part, ), dtConversionWarning, 2)
 
                         else:
                             dd_url.append(uval)
@@ -1240,7 +1239,7 @@ class DataDef_Convert():
                     for k, u_part in self.data_value(["url-header"], dict).items():
                         uval = _get_url_part(u_part)
                         if uval == None:
-                            self.warn('Invalid url-header definition: %s' % (u_part), dtConversionWarning, 2)
+                            self.warn('Invalid url-header definition: %s' % (u_part, ), dtConversionWarning, 2)
 
                         else:
                             self.cdata_def["url-header"][k] = uval
@@ -1252,7 +1251,7 @@ class DataDef_Convert():
                 for k, u_part in self.data_value(["url-data"], dict).items():
                     uval = _get_url_part(u_part)
                     if uval == None:
-                        self.warn('Invalid url-data definition: %s' % (u_part), dtConversionWarning, 2)
+                        self.warn('Invalid url-data definition: %s' % (u_part, ), dtConversionWarning, 2)
 
                     else:
                         self.cdata_def["url-data"][k] = uval
@@ -1486,7 +1485,7 @@ class DATAnode():
             self.end_links["values"] = links["values"].copy()
             self.end_links["nodes"] = links["nodes"].copy()
             if self.dtree.show_result:
-                self.dtree.print_text(u'  adding node %s' % (self.print_node()))
+                self.dtree.print_text(u'  adding node %s' % (self.print_node(), ))
 
         if nm == None:
             return childs
@@ -1535,7 +1534,7 @@ class DATAnode():
         else:
             if not is_data_value(sub_def[1], link_values):
                 self.dtree.warn('You requested a link, but link value %s is not stored!' % \
-                    sub_def[1], dtParseWarning, 3)
+                    (sub_def[1], ), dtParseWarning, 3)
                 return (None, 0)
 
             value = link_values[sub_def[1]]
@@ -1580,16 +1579,16 @@ class DATAnode():
         return False
 
     def find_name(self, node_def):
-        nv = find_value(node_def)
+        nv = self.find_value(node_def)
         if nv != None:
             if self.dtree.show_result:
                 if isinstance(nv, (str,unicode)):
                     self.dtree.print_text(u'  storing name = "%s" from node: %s\n      %s' % \
-                        (nv, self.print_node(), self.print_node_def(node_def['name'])))
+                        (nv, self.print_node(), self.print_node_def(node_def)))
 
                 else:
                     self.dtree.print_text(u'  storing name = %s from node: %s\n      %s' % \
-                        (nv, self.print_node(), self.print_node_def(node_def['name'])))
+                        (nv, self.print_node(), self.print_node_def(node_def)))
             return nv
 
     def find_value(self, node_def = None):
@@ -1704,7 +1703,7 @@ class DATAnode():
                     rstr = u'%s\n%s    returning it as path_def value' % (rstr, spc)
 
         else:
-            rstr = u'%snode_def: ' % spc
+            rstr = u'%snode_def: ' % (spc, )
             for k, v in node_def.items():
                 rstr = u'%s%s: %s\n%s          ' % (rstr, k, v, spc)
 
@@ -2107,7 +2106,7 @@ class JSONnode(DATAnode):
         return sv
 
     def print_node(self, print_all = False):
-        value = self.find_node_value() if self.type == "value" else '"%s"' % self.type
+        value = self.find_node_value() if self.type == "value" else '"%s"' % (self.type, )
         return u'%s = %s' % (self.key, value)
 
 # end JSONnode
@@ -2165,8 +2164,8 @@ class DATAtree():
             if is_data_value("dtversion", data_def, tuple):
                 self.data_def = data_def
                 if data_def["dtversion"] != self.ddconv.dtversion():
-                    self.warn('Your supplied data_def was converted using version %d.%d.%d.\n' + \
-                        'You best reconvert it with the current version.' % data_def["dtversion"], dtdata_defWarning, 2)
+                    self.warn('Your supplied data_def was converted using version %d.%d.%d.\n' % data_def["dtversion"] + \
+                        'You best reconvert it with the current version.', dtdata_defWarning, 2)
 
             else:
                 self.ddconv.convert_data_def(data_def)
@@ -2206,7 +2205,7 @@ class DATAtree():
                         self.timezone = oldtz
 
                     else:
-                        self.warn('Invalid timezone "%s" suplied. Falling back to UTC' % (timezone), dtdata_defWarning, 2)
+                        self.warn('Invalid timezone "%s" suplied. Falling back to UTC' % (timezone, ), dtdata_defWarning, 2)
                         self.timezone = pytz.utc
 
             self.set_current_date()
@@ -2233,7 +2232,7 @@ class DATAtree():
 
             else:
                 if cdate != None:
-                    self.warn('Invalid or no current_date "%s" suplied. Falling back to NOW' % (cdate), dtdata_defWarning, 2)
+                    self.warn('Invalid or no current_date "%s" suplied. Falling back to NOW' % (cdate, ), dtdata_defWarning, 2)
 
                 self.current_date = self.timezone.normalize(datetime.datetime.now(pytz.utc).astimezone(self.timezone)).date()
                 self.current_ordinal = self.current_date.toordinal()
@@ -2275,7 +2274,7 @@ class DATAtree():
             sn = self.root.get_children(path_def = init_path, links = links)
             if sn == None or len(sn) == 0 or not isinstance(sn[0][0], DATAnode):
                 self.warn('"init-path": %s did not result in a valid node. Falling back to the rootnode' \
-                    % (init_path), dtParseWarning, 2)
+                    % (init_path, ), dtParseWarning, 2)
                 self.start_node = self.root
                 return dtStartNodeInvalid
 
@@ -2289,7 +2288,7 @@ class DATAtree():
                 path_def = self.ddconv.convert_path_def(path_def)
 
             if not isinstance(path_def, tuple):
-                self.warn('Invalid "path_def": %s supplied to "find_data_value"' % (path_def), dtParseWarning, 1)
+                self.warn('Invalid "path_def": %s supplied to "find_data_value"' % (path_def, ), dtParseWarning, 1)
                 return
 
             if len(path_def) == 0:
@@ -2317,6 +2316,15 @@ class DATAtree():
                     return self._get_default(path_def[-1])
 
             # We found multiple values
+            if len(nlist) > 1 and (path_def[-1][0] & dtgetOnlyOne):
+                # There is only one child allowed
+                if (path_def[-1][0] & dtgetLast):
+                    # There is a request to only return the last
+                    nlist = nlist[-1:]
+
+                else:
+                    nlist = nlist[:1]
+
             if len(nlist) > 1 or self._get_type(path_def[-1]) == dttypeList:
                 vlist = []
                 for node in nlist:
@@ -2360,7 +2368,7 @@ class DATAtree():
                 return dtStartNodeInvalid
 
             if self.print_searchtree:
-                self.print_text('The %s Tree:' % self.start_node.print_node())
+                self.print_text('The %s Tree:' % (self.start_node.print_node(), ))
                 self.start_node.print_tree()
 
             self.result = []
@@ -2370,7 +2378,7 @@ class DATAtree():
                     continue
 
                 if self.show_result:
-                    self.print_text(u'parsing keypath: %s' % (list(dset["key-path"][0])))
+                    self.print_text(u'parsing keypath: %s' % (dset["key-path"][0], ))
 
                 links = {"values": {},"nodes": {}}
                 self.key_list = self.start_node.get_children(path_def = dset["key-path"], links = links)
@@ -2395,7 +2403,7 @@ class DATAtree():
                     links = k[0].end_links
                     tlist = [k[1]]
                     if self.show_result:
-                        self.print_text(u'parsing key %s' % (tlist))
+                        self.print_text(u'parsing key %s' % (tlist, ))
 
                     for v in dset["values"][:]:
                         if not isinstance(v, tuple) or len(v) == 0:
@@ -2433,77 +2441,82 @@ class DATAtree():
             return value
 
         for cd in calc_def:
-            if isinstance(value, (str, unicode)):
-                if cd[0] == dtcalcLettering:
-                    if cd[1] == dtcalcLower:
-                        value = unicode(value).lower().strip()
-
-                    elif cd[1] == dtcalcUpper:
-                        value = unicode(value).upper().strip()
-
-                    elif cd[1] == dtcalcCapitalize:
-                        value = unicode(value).capitalize().strip()
-
-                elif cd[0] == dtcalcAsciiReplace:
-                    value = value.lower()
-                    if len(cd[1]) > 2:
-                        value = re.sub(cd[1][2], cd[1][1], value)
-
-                    value = value.encode('ascii','replace')
-                    value = re.sub('\?', cd[1][0], value)
-
-                elif cd[0] == dtcalcLstrip:
-                    if value.strip().lower()[:len(cd[1])] == cd[1].lower():
-                        value = unicode(value[len(cd[1]):]).strip()
-
-                elif cd[0] == dtcalcRstrip:
-                    if value.strip().lower()[-len(cd[1]):] == cd[1].lower():
-                        value = unicode(value[:-len(cd[1])]).strip()
-
-                elif cd[0] == dtcalcSub:
-                    for sset in cd[1]:
-                        value = re.sub(sset[0], sset[1], value).strip()
-
-                elif cd[0] == dtcalcSplit:
-                    for sset in cd[1]:
-                        try:
-                            fill_char = sset[0]
-                            if fill_char in ('\\s', '\\t', '\\n', '\\r', '\\f', '\\v', ' ','\\s*', '\\t*', '\\n*', '\\r*', '\\f*', '\\v*'):
-                                fill_char = ' '
-                                value = value.strip()
-
-                            dat = re.split(sset[0],value)
-                            if sset[1] == 'list-all':
-                                value = dat
-
-                            else:
-                                value = dat[sset[1]]
-                                for i in range(2, len(sset)):
-                                    if ( 0<= sset[i] < len(dat)) or (-len(dat) <= sset[i] < 0):
-                                        value = value + fill_char +  dat[sset[i]]
-
-                        except:
-                            calc_warning('split')
-
-            elif isinstance(value, (int, float)):
-                if cd[0] == dtcalcMultiply:
-                    value = int(value) * cd[1]
-
-                elif cd[0] == dtcalcDivide:
-                    value = int(value) // cd[1]
-
-            if cd[0] == dtcalcReplace:
+            try:
                 if isinstance(value, (str, unicode)):
-                    v = value.strip().lower()
+                    if cd[0] == dtcalcLettering:
+                        if cd[1] == dtcalcLower:
+                            value = unicode(value).lower().strip()
 
-                else:
-                    v = value
+                        elif cd[1] == dtcalcUpper:
+                            value = unicode(value).upper().strip()
 
-                if v in cd[1]:
-                    value = cd[2][cd[1].index(v)]
+                        elif cd[1] == dtcalcCapitalize:
+                            value = unicode(value).capitalize().strip()
 
-                else:
-                    value = None
+                    elif cd[0] == dtcalcAsciiReplace:
+                        value = value.lower()
+                        if len(cd[1]) > 2:
+                            value = re.sub(cd[1][2], cd[1][1], value)
+
+                        value = value.encode('ascii','replace')
+                        value = re.sub('\?', cd[1][0], value)
+
+                    elif cd[0] == dtcalcLstrip:
+                        if value.strip().lower()[:len(cd[1])] == cd[1].lower():
+                            value = unicode(value[len(cd[1]):]).strip()
+
+                    elif cd[0] == dtcalcRstrip:
+                        if value.strip().lower()[-len(cd[1]):] == cd[1].lower():
+                            value = unicode(value[:-len(cd[1])]).strip()
+
+                    elif cd[0] == dtcalcSub:
+                        for sset in cd[1]:
+                            value = re.sub(sset[0], sset[1], value).strip()
+
+                    elif cd[0] == dtcalcSplit:
+                        for sset in cd[1]:
+                            try:
+                                fill_char = sset[0]
+                                if fill_char in ('\\s', '\\t', '\\n', '\\r', '\\f', '\\v', ' ','\\s*', '\\t*', '\\n*', '\\r*', '\\f*', '\\v*'):
+                                    fill_char = ' '
+                                    value = value.strip()
+
+                                dat = re.split(sset[0],value)
+                                if sset[1] == 'list-all':
+                                    value = dat
+
+                                else:
+                                    value = dat[sset[1]]
+                                    for i in range(2, len(sset)):
+                                        if ( 0<= sset[i] < len(dat)) or (-len(dat) <= sset[i] < 0):
+                                            value = value + fill_char +  dat[sset[i]]
+
+                            except:
+                                calc_warning('split')
+
+                elif isinstance(value, (int, float)):
+                    if cd[0] == dtcalcMultiply:
+                        value = int(value) * cd[1]
+
+                    elif cd[0] == dtcalcDivide:
+                        value = int(value) // cd[1]
+
+                if cd[0] == dtcalcReplace:
+                    if isinstance(value, (str, unicode)):
+                        v = value.strip().lower()
+
+                    else:
+                        v = value
+
+                    if v in cd[1]:
+                        value = cd[2][cd[1].index(v)]
+
+                    else:
+                        value = None
+
+            except:
+                #~ traceback.print_exc()
+                calc_warning('unknown')
 
         return value
 
@@ -2581,7 +2594,7 @@ class DATAtree():
                                     month = self.month_names.index(d[index].lower())
 
                                 else:
-                                    calc_warning('invalid "%s" value for date type' % (type_def[1][index]))
+                                    calc_warning('invalid "%s" value for date type' % (type_def[1][index], ))
                                     continue
 
                         elif type_def[1][index].lower() == 'y':
@@ -2723,7 +2736,7 @@ class DATAtree():
             self.fle.write(text.encode('utf-8', 'replace'))
 
         else:
-            self.fle.write(u'%s\n' % text)
+            self.fle.write(u'%s\n' % (text, ))
 
     def get_leveltabs(self, level, spaces=3):
         stab = u''
@@ -2768,17 +2781,9 @@ class HTMLtree(HTMLParser, DATAtree):
             # read the html page into the tree
             try:
                 # Cover for incomplete reads where the essentiel body part is retrieved
-                if u'<body>' in data and not u'</body>' in data:
-                    data = u'%s</body>' % data
-
-                if u'<BODY>' in data and not u'</BODY>' in data:
-                    data = u'%s</BODY>' % data
-
-                if u'<html>' in data and not u'</html>' in data:
-                    data = u'%s</html>' % data
-
-                if u'<HTML>' in data and not u'</HTML>' in data:
-                    data = u'%s</HTML>' % data
+                for ctag in ('body', 'BODY', 'html', 'HTML', 'xml', 'XML'):
+                    if u'<%s>' % (ctag, ) in data and not u'</%s>' % (ctag, ) in data:
+                        data = u'%s</%s>' % (data, ctag)
 
                 self.feed(data)
                 self.reset()
@@ -2822,6 +2827,9 @@ class HTMLtree(HTMLParser, DATAtree):
                 sub = 'start'
                 tag = t.split (' ')[0].lower()
 
+            if ',' in tag or '"' in tag or "'" in tag:
+                continue
+
             if not tag in self.tag_count.keys():
                 self.tag_count[tag] ={}
                 self.tag_count[tag]['close'] = 0
@@ -2834,7 +2842,7 @@ class HTMLtree(HTMLParser, DATAtree):
             self.tag_count[tag][sub] += 1
 
         for t, c in self.tag_count.items():
-            if c['close'] == 0 and (c['start'] >0 or c['auto'] > 0):
+            if c['close'] == 0 and (c['start'] >0 or c['auto'] > 0) and not t in self.autoclose_tags:
                 self.autoclose_tags.append(t)
 
             if self.print_tags:
@@ -2991,8 +2999,8 @@ class DataTreeShell():
             if is_data_value("dtversion", data_def, tuple):
                 self.data_def = data_def
                 if data_def["dtversion"] != self.ddconv.dtversion():
-                    self.warn('Your supplied data_def was converted using version %d.%d.%d.\n' + \
-                        'You best reconvert it with the current version.' % data_def["dtversion"], dtdata_defWarning, 2)
+                    self.warn('Your supplied data_def was converted using version %d.%d.%d.\n' % data_def["dtversion"] + \
+                        'You best reconvert it with the current version.', dtdata_defWarning, 2)
 
             else:
                 self.set_errorcode(self.ddconv.convert_data_def(data_def))
@@ -3031,7 +3039,7 @@ class DataTreeShell():
                         self.timezone = oldtz
 
                     else:
-                        self.warn('Invalid timezone "%s" suplied. Falling back to UTC' % (timezone), dtdata_defWarning, 2)
+                        self.warn('Invalid timezone "%s" suplied. Falling back to UTC' % (timezone, ), dtdata_defWarning, 2)
                         self.set_errorcode(dtTimeZoneFailed)
                         self.timezone = pytz.utc
 
@@ -3062,12 +3070,12 @@ class DataTreeShell():
                 if cdate != None:
                     self.set_errorcode(dtCurrentDateFailed)
                     self.warn('Invalid or no current_date "%s" suplied. Falling back to NOW' % \
-                        (cdate), dtdata_defWarning, 2)
+                        (cdate, ), dtdata_defWarning, 2)
 
                 self.current_date = self.timezone.normalize(datetime.datetime.now(pytz.utc).astimezone(self.timezone)).date()
                 self.current_ordinal = self.current_date.toordinal()
 
-    def get_url(self, url_data = None):
+    def get_url(self, url_data = None, only_acceptstring = True):
         # "url", "encoding", "accept-header", "url-data", "data-format", 'default-item-count', "item-range-splitter"
         # "url-date-type" 0 = offset or formated string, 1 = timestamp, 2 = weekday
         # "url-date-format", "url-date-multiplier", "url-weekdays"
@@ -3092,15 +3100,23 @@ class DataTreeShell():
                     url += unicode(uval)
 
             encoding = self.data_def["encoding"]
-            accept_header = {}
-            for k, u_part in self.data_def["url-header"].items():
-                uval = get_url_part(u_part)
-                if uval == None:
-                    self.warn('Invalid url-header definition: %s' % (u_part, ), dtUrlWarning, 1)
-                    return None
+            if only_acceptstring:
+                if "Accept" in self.data_def["url-header"].keys():
+                    accept_header = self.data_def["url-header"]["Accept"]
 
                 else:
-                    accept_header[k] = uval
+                    accept_header = None
+
+            else:
+                accept_header = {}
+                for k, u_part in self.data_def["url-header"].items():
+                    uval = get_url_part(u_part)
+                    if uval == None:
+                        self.warn('Invalid url-header definition: %s' % (u_part, ), dtUrlWarning, 1)
+                        return None
+
+                    else:
+                        accept_header[k] = uval
 
             url_data = {}
             for k, u_part in self.data_def["url-data"].items():
@@ -3306,9 +3322,8 @@ class DataTreeShell():
 
             else:
                 self.set_errorcode(dtSortFailed)
-                self.warn('Sort request {"path": %s, "childkeys": %s}" failed\n' + \
-                    '   as "path" is not present in the data or is not a list!' % \
-                    (path, childkeys), dtDataWarning, 2)
+                self.warn('Sort request {"path": %s, "childkeys": %s}" failed\n' % (path, childkeys) + \
+                    '   as "path" is not present in the data or is not a list!', dtDataWarning, 2)
 
         with self.tree_lock:
             dttype = None
@@ -3325,18 +3340,18 @@ class DataTreeShell():
 
                 except:
                     self.warn('Failed to initialise the searchtree. Run with a valid dataset %s' \
-                        % type(data), dtDataWarning, 1)
+                        % (type(data), ), dtDataWarning, 1)
 
             elif isinstance(data, (str, unicode)) and data.strip()[0] == "<":
                 dttype = 'html'
                 autoclose_tags = self.data_def["autoclose-tags"]
                 # Cover for incomplete reads where the essentiel body part is retrieved
                 for ctag in ('body', 'BODY', 'html', 'HTML', 'xml', 'XML'):
-                    if u'<%s>' % ctag in data and not u'</%s>' % ctag in data:
+                    if u'<%s>' % (ctag, ) in data and not u'</%s>' % (ctag, ) in data:
                         data = u'%s</%s>' % (data, ctag)
 
                 if self.data_def["enclose-with-html-tag"]:
-                    data = u'<html>%s</html>' % data
+                    data = u'<html>%s</html>' % (data, )
 
                 for subset in self.data_def["text_replace"]:
                     if isinstance(subset, list) and len(subset) >= 2:
@@ -3345,7 +3360,7 @@ class DataTreeShell():
 
                         except:
                             self.set_errorcode(dtTextReplaceFailed)
-                            self.warn('An error occured applying "text_replace" regex: "%s"' % subset, dtDataWarning, 2)
+                            self.warn('An error occured applying "text_replace" regex: "%s"' % (subset, ), dtDataWarning, 2)
 
                 for ut in self.data_def["unquote_html"]:
                     if isinstance(ut, (str, unicode)):
@@ -3354,7 +3369,7 @@ class DataTreeShell():
 
                         except:
                             self.set_errorcode(dtUnquoteFailed)
-                            self.warn('An error occured applying "unquote_html" regex: "%s"' % ut, dtDataWarning, 2)
+                            self.warn('An error occured applying "unquote_html" regex: "%s"' % (ut, ), dtDataWarning, 2)
 
                 self.searchtree = HTMLtree(data, autoclose_tags, self.print_tags, self.fle, caller_id = self.caller_id, warnaction = None)
 
@@ -3368,7 +3383,7 @@ class DataTreeShell():
 
                     except:
                         self.set_errorcode(dtSortFailed)
-                        self.warn('Sort request "%s" failed!' % (sitem), dtDataWarning, 2)
+                        self.warn('Sort request "%s" failed!' % (sitem, ), dtDataWarning, 2)
 
                 self.searchtree = JSONtree(data, self.fle, caller_id = self.caller_id, warnaction = None)
 
@@ -3447,9 +3462,6 @@ class DataTreeShell():
 
             # remove any leading or trailing spaces on a string/unicode value
             value = linkdata[varid] if (not  isinstance(linkdata[varid], (unicode, str))) else unicode(linkdata[varid]).strip()
-            if value in self.empty_values:
-                return
-
             return process_extras(value, vdef, key)
 
         def process_link_function(vdef, key):
@@ -3476,102 +3488,103 @@ class DataTreeShell():
             return process_extras(value, vdef, key)
 
         def process_extras(value, vdef, key):
-            if vdef[0] & dtlinkhasRegex and isinstance(value, (str, unicode)):
-                search_regex = vdef[dtlinkPos[dtlinkhasRegex]]
-                try:
-                    dd = re.search(search_regex, value, re.DOTALL)
-                    if dd.group(1) not in ('', None):
-                        value = dd.group(1)
+            if not value in self.empty_values:
+                if vdef[0] & dtlinkhasRegex and isinstance(value, (str, unicode)):
+                    search_regex = vdef[dtlinkPos[dtlinkhasRegex]]
+                    try:
+                        dd = re.search(search_regex, value, re.DOTALL)
+                        if dd.group(1) not in ('', None):
+                            value = dd.group(1)
 
-                    else:
-                        self.warn('Regex "%s" in: %s returned no value on "%s"'% \
-                            (search_regex, vdef, value), dtLinkWarning, 4)
+                        else:
+                            self.warn('Regex "%s" in: %s returned no value on "%s"'% \
+                                (search_regex, vdef, value), dtLinkWarning, 4)
+                            value = None
+
+                    except:
+                        self.warn('Invalid value "%s" or invalid regex "%s" in: %s'% \
+                            (value, search_regex, vdef), dtLinkWarning, 4)
                         value = None
 
-                except:
-                    self.warn('Invalid value "%s" or invalid regex "%s" in: %s'% \
-                        (value, search_regex, vdef), dtLinkWarning, 4)
-                    value = None
+                if vdef[0] & dtlinkhasType:
+                    dtype = vdef[dtlinkPos[dtlinkhasType]]
+                    try:
+                        if dtype == dttypeString:
+                            value = unicode(value)
 
-            if vdef[0] & dtlinkhasType:
-                dtype = vdef[dtlinkPos[dtlinkhasType]]
-                try:
-                    if dtype == dttypeString:
-                        value = unicode(value)
+                        elif dtype == dttypeLower:
+                            value = unicode(value).lower()
 
-                    elif dtype == dttypeLower:
-                        value = unicode(value).lower()
+                        elif dtype == dttypeUpper:
+                            value = unicode(value).upper()
 
-                    elif dtype == dttypeUpper:
-                        value = unicode(value).upper()
+                        elif dtype == dttypeCapitalize:
+                            value = unicode(value).capitalize()
 
-                    elif dtype == dttypeCapitalize:
-                        value = unicode(value).capitalize()
+                        elif dtype == dttypeInteger:
+                            value = int(value)
 
-                    elif dtype == dttypeInteger:
-                        value = int(value)
+                        elif dtype == dttypeFloat:
+                            value = float(value)
 
-                    elif dtype == dttypeFloat:
-                        value = float(value)
+                        elif dtype == dttypeBoolean:
+                            value = bool(value)
 
-                    elif dtype == dttypeBoolean:
-                        value = bool(value)
+                    except:
+                        vtype = {
+                                dttypeString: "String",
+                                dttypeLower: "LowerCase",
+                                dttypeUpper: "UpperCase",
+                                dttypeCapitalize: "Capitalize",
+                                dttypeInteger: "Integer",
+                                dttypeFloat: "Float",
+                                dttypeBoolean: "Boolean"}
+                        self.warn('Error on applying type "%s" on "%s"'% (vtype[dtype], value), dtLinkWarning, 4)
+                        value = None
 
-                except:
-                    vtype = {
-                            dttypeString: "String",
-                            dttypeLower: "LowerCase",
-                            dttypeUpper: "UpperCase",
-                            dttypeCapitalize: "Capitalize",
-                            dttypeInteger: "Integer",
-                            dttypeFloat: "Float",
-                            dttypeBoolean: "Boolean"}
-                    self.warn('Error on applying type "%s" on "%s"'% (vtype[dtype], value), dtLinkWarning, 4)
-                    value = None
+                if vdef[0] & dtlinkhasCalc:
+                    for cv in vdef[dtlinkPos[dtlinkhasCalc]]:
+                        if cv[0] == dtcalcMultiply:
+                            try:
+                                if not isinstance(value, (int, float)):
+                                    value = float(value)
+                                value = value * cv[1]
 
-            if vdef[0] & dtlinkhasCalc:
-                for cv in link_node[dtlinkPos[dtlinkhasCalc]]:
-                    if cv[0] == dtcalcMultiply:
-                        try:
-                            if not isinstance(value, (int, float)):
-                                value = float(value)
-                            value = value * cv[1]
+                            except:
+                                self.warn('Error on applying multiplier "%s" on "%s"'% \
+                                    (cv[1], value), dtLinkWarning, 4)
 
-                        except:
-                            self.warn('Error on applying multiplier "%s" on "%s"'% \
-                                (cv[1], value), dtLinkWarning, 4)
+                        if cv[0] == dtcalcDivide:
+                            try:
+                                if not isinstance(value, (int, float)):
+                                    value = float(value)
+                                value = value / cv[1]
 
-                    if cv[0] == dtcalcDivide:
-                        try:
-                            if not isinstance(value, (int, float)):
-                                value = float(value)
-                            value = value / cv[1]
+                            except:
+                                self.warn('Error on applying divider "%s" on "%s"'% \
+                                    (cv[1], value), dtLinkWarning, 4)
 
-                        except:
-                            self.warn('Error on applying divider "%s" on "%s"'% \
-                                (cv[1], value), dtLinkWarning, 4)
+                if vdef[0] & dtlinkhasMax:
+                    if isinstance(value, (str, unicode, list, dict)) and len(value) > vdef[dtlinkPos[dtlinkhasMax]]:
+                        self.warn('Requested datavalue "%s" is longer then %s'% \
+                            (key, vdef[dtlinkPos[dtlinkhasMax]]), dtLinkWarning, 4)
+                        value = None
 
-            if vdef[0] & dtlinkhasMax:
-                if isinstance(value, (str, unicode, list, dict)) and len(value) > vdef[dtlinkPos[dtlinkhasMax]]:
-                    self.warn('Requested datavalue "%s" is longer then %s'% \
-                        (key, vdef[dtlinkPos[dtlinkhasMax]]), dtLinkWarning, 4)
-                    value = None
+                    if isinstance(value, (int, float)) and value > vdef[dtlinkPos[dtlinkhasMax]]:
+                        self.warn('Requested datavalue "%s" is bigger then %s'% \
+                            (key, vdef[dtlinkPos[dtlinkhasMax]]), dtLinkWarning, 4)
+                        value = None
 
-                if isinstance(value, (int, float)) and value > vdef[dtlinkPos[dtlinkhasMax]]:
-                    self.warn('Requested datavalue "%s" is bigger then %s'% \
-                        (key, vdef[dtlinkPos[dtlinkhasMax]]), dtLinkWarning, 4)
-                    value = None
+                if vdef[0] & dtlinkhasMin:
+                    if isinstance(value, (str, unicode, list, dict)) and len(value) < vdef[dtlinkPos[dtlinkhasMin]]:
+                        self.warn('Requested datavalue "%s" is shorter then %s'% \
+                            (key, vdef[dtlinkPos[dtlinkhasMin]]), dtLinkWarning, 4)
+                        value = None
 
-            if vdef[0] & dtlinkhasMin:
-                if isinstance(value, (str, unicode, list, dict)) and len(value) < vdef[dtlinkPos[dtlinkhasMin]]:
-                    self.warn('Requested datavalue "%s" is shorter then %s'% \
-                        (key, vdef[dtlinkPos[dtlinkhasMin]]), dtLinkWarning, 4)
-                    value = None
-
-                if isinstance(value, (int, float)) and value < vdef[dtlinkPos[dtlinkhasMin]]:
-                    self.warn('Requested datavalue "%s" is smaller then %s'% \
-                        (key, vdef[dtlinkPos[dtlinkhasMin]]), dtLinkWarning, 4)
-                    value = None
+                    if isinstance(value, (int, float)) and value < vdef[dtlinkPos[dtlinkhasMin]]:
+                        self.warn('Requested datavalue "%s" is smaller then %s'% \
+                            (key, vdef[dtlinkPos[dtlinkhasMin]]), dtLinkWarning, 4)
+                        value = None
 
             if value in self.empty_values:
                 return vdef[dtlinkPos[dtlinkhasDefault]]
@@ -3582,20 +3595,23 @@ class DataTreeShell():
         if isinstance(linkdata, list):
             for k, v in self.data_def["values"].items():
                 lact = v[0] & dtlinkGroup
+                cval = None
                 if lact == dtlinkVarID:
-                    values[k] = get_variable(v, k)
+                    cval = get_variable(v, k)
 
                 elif lact == dtlinkFuncID:
-                    values[k] = process_link_function(v, k)
+                    cval = process_link_function(v, k)
 
                 elif lact == dtlinkValue:
-                    values[k] = v[1]
+                    cval = v[1]
 
-                else:
+                if not cval in self.empty_values:
+                    values[k] = cval
+
+                elif not v[dtlinkPos[dtlinkhasDefault]] in self.empty_values:
                     values[k] = v[dtlinkPos[dtlinkhasDefault]]
-
         else:
-            self.warn('No valid data "%s" to link with' % (linkdata), dtLinkWarning, 2)
+            self.warn('No valid data "%s" to link with' % (linkdata, ), dtLinkWarning, 2)
 
         return values
 
@@ -3612,13 +3628,13 @@ class DataTreeShell():
 
                 else:
                     if fid < 200 and retval in self.empty_values:
-                        self.warn('No result on custom link function: "%s"\n' + \
-                            '   Using link_data: %s' % (fid, data), dtLinkWarning, 4)
+                        self.warn('No result on custom link function: "%s"\n' % (fid, ) + \
+                            '   Using link_data: %s' % (data, ), dtLinkWarning, 4)
 
                     return retval
 
             # strip data[1] from the end of data[0] if present and make sure it's unicode
-            elif fid == 0:
+            if fid == 0:
                 if not is_data_value(0, data, str):
                     link_warning('Missing or invalid data value 0')
                     if default != None:
@@ -3744,7 +3760,7 @@ class DataTreeShell():
                     if data[0] and is_data_value(1, data):
                         return data[1]
 
-                    elif is_data_value(2, data):
+                    elif not data[0] and is_data_value(2, data):
                         return data[2]
 
                     else:
@@ -3858,8 +3874,8 @@ class DataTreeShell():
                 return None
 
         except:
-            self.warn('Unknown link Error on function: "%s"\n' + \
-                    '   Using link_data: %s\n%s' % (fid, data, traceback.print_exc()), dtLinkWarning, 2)
+            self.warn('Unknown link Error on function: "%s"\n' % (fid, ) + \
+                    '   Using link_data: %s\n%s' % (data, traceback.print_exc()), dtLinkWarning, 2)
             return default
 
     def add_on_link_functions(self, fid, data = None, default = None):
