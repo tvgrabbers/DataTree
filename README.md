@@ -36,6 +36,9 @@ but as this name is already taken in the Python library...
    
 ### Release notes
 
+With [version 1.3.4](https://github.com/tvgrabbers/DataTree/releases/tag/stable-1.3.4) 18-06-2017  
+ * Some minor fixes
+ 
 With [version 1.3.3](https://github.com/tvgrabbers/DataTree/releases/tag/stable-1.3.3) 17-05-2017
  * with the introduction of the "node" keyword to store references to nodes, significant speed
    increase of some 30% can be achieved. It does need adaptations to existing data_defs.
