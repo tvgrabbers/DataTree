@@ -3,7 +3,6 @@
 [The latest stable release](https://github.com/tvgrabbers/DataTree/releases/latest)  
 [Go to the WIKI](https://github.com/tvgrabbers/DataTree/wiki)  
 [Go to tvgrabpyAPI](https://github.com/tvgrabbers/tvgrabpyAPI)  
-[Go to tvgrabnlpy](https://github.com/tvgrabbers/tvgrabnlpy)  
 
 Spin-off python module for extracting structured data from HTML and JSON pages.  
 It is at the heart of the tv_grab_py_API and was initially named just DataTree,  
@@ -35,6 +34,14 @@ but as this name is already taken in the Python library...
    general rule before those added rules. Fixed in version 1.3.1.
    
 ### Release notes
+
+With [version 1.4.0 Beta](https://github.com/tvgrabbers/DataTree/releases/tag/beta-1.4.0-p20170625) 25-06-2017  
+ * Introducing a pre-conversion of the data_def to a more machine friendly and thus faster format.
+   During conversion the data_defs are validated and any defaults are filled-in. Because of this
+   a lot of validation code during parsing could be removed, introducing more speed increasement.
+ * During a complete review of the code, adapting it to the converted data_def format, several
+   inconsistencies in data_def keyword handling were found and were corrected.
+ * It should be compatible with older implementations.
 
 With [version 1.3.4](https://github.com/tvgrabbers/DataTree/releases/tag/stable-1.3.4) 18-06-2017  
  * Some minor fixes
