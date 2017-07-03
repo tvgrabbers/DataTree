@@ -63,38 +63,54 @@ _warnings = None
 dtQuiting = -1
 dtDataOK = 0
 dtDataDefOK = 0
-dtDataInvalid = 1
-dtStartNodeInvalid = 2
-dtDataDefInvalid = 3
-dtNoData = 7
-dtFatalError = 7
+dtURLerror = 1
+dtTimeoutError = 2
+dtHTTPerror = 3
+dtJSONerror = 4
+dtEmpty = 5
+dtStartNodeInvalid = 6
+dtDataDefInvalid = 7
+dtDataInvalid = 10
+dtNoData = 14
+dtUnknownError = 15
+dtFatalError = 15
 
-dtSortFailed = 8
-dtUnquoteFailed = 16
-dtTextReplaceFailed = 32
-dtTimeZoneFailed = 64
-dtCurrentDateFailed = 128
-dtInvalidValueLink = 256
-dtInvalidNodeLink = 512
-dtInvalidPathDef = 1024
-dtInvalidLinkDef = 2048
+dtSortFailed = 16
+dtUnquoteFailed = 32
+dtTextReplaceFailed = 64
+dtTimeZoneFailed = 128
+dtCurrentDateFailed = 256
+dtInvalidValueLink = 512
+dtInvalidNodeLink = 1024
+dtInvalidPathDef = 2048
+dtInvalidLinkDef = 4096
 dtErrorTexts = {
-    -1: 'The execution was aborted',
-    0: 'Data OK',
-    1: 'Invalid dataset!',
-    2: 'Invalid startnode!',
-    3: 'Invalid data_def',
-    4: 'Unknown State',
-    5: 'Unknown State',
-    6: 'Unknown State',
-    7: 'No Data',
-    8: 'Data sorting failed',
-    16: 'The Unquote filter failed',
-    32: 'The Textreplace filter failed',
-    64: 'Timezone initialization failed',
-    128: 'Setting the current date failed',
-    256: 'A not jet stored value link was requested',
-    512: 'A not jet stored node link was requested'}
+    -dtQuiting: 'The execution was aborted',
+    dtDataOK: 'Data OK',
+    dtURLerror: 'There was an error in the URL',
+    dtTimeoutError: 'Fetching the page took to long',
+    dtHTTPerror: 'A HTTP error occured',
+    dtJSONerror: 'A JSON error occured',
+    dtStartNodeInvalid: 'Invalid startnode!',
+    dtEmpty: 'Empty Page',
+    dtDataDefInvalid: 'Invalid data_def',
+    dtDataInvalid: 'Invalid dataset!',
+    8: 'Unused Error code',
+    9: 'Unused Error code',
+    dtNoData: 'No Data',
+    11: 'Unused Error code',
+    12: 'Unused Error code',
+    13: 'Unused Error code',
+    dtUnknownError: 'An unknown error occured',
+    dtSortFailed: 'Data sorting failed',
+    dtUnquoteFailed: 'The Unquote filter failed',
+    dtTextReplaceFailed: 'The Textreplace filter failed',
+    dtTimeZoneFailed: 'Timezone initialization failed',
+    dtCurrentDateFailed: 'Setting the current date failed',
+    dtInvalidValueLink: 'A not jet stored value link was requested',
+    dtInvalidNodeLink: 'A not jet stored node link was requested',
+    dtInvalidPathDef: 'Errors in a Path_def were encountered',
+    dtInvalidLinkDef: 'Errors in a Link_def were encountered'}
 
 # The allowances for a path_def
 dtpathWithValue = 1
@@ -1520,11 +1536,11 @@ class DATAnode():
         def wrong_value(value, vtype):
             if sub_def[0] == dtvalValue:
                 self.dtree.warn('Invalid %s %s "%s" requested. Should be %s.' % \
-                    (valuetype, "matchvalue", value, vtype), dtParseWarning, 3)
+                    (valuetype, "matchvalue", value, vtype), dtParseWarning, 3, 3)
 
             else:
                 self.dtree.warn('Invalid %s %s "%s" requested. Should be %s.' % \
-                    (valuetype, "linkvalue", value, vtype), dtParseWarning, 2)
+                    (valuetype, "linkvalue", value, vtype), dtParseWarning, 2, 3)
 
             return (None, 0)
 
@@ -3339,8 +3355,10 @@ class DataTreeShell():
                     dttype = 'json'
 
                 except:
+                    self.set_errorcode(dtJSONerror, True)
                     self.warn('Failed to initialise the searchtree. Run with a valid dataset %s' \
                         % (type(data), ), dtDataWarning, 1)
+                    return self.check_errorcode()
 
             elif isinstance(data, (str, unicode)) and data.strip()[0] == "<":
                 dttype = 'html'
@@ -3375,6 +3393,7 @@ class DataTreeShell():
 
             else:
                 self.warn('Failed to initialise the searchtree. Run with a valid dataset', dtDataWarning, 1)
+                return self.check_errorcode()
 
             if dttype == 'json':
                 for sitem in self.data_def['data']['sort']:
@@ -3425,7 +3444,7 @@ class DataTreeShell():
             self.result = []
             x = self.check_errorcode()
             if x:
-                self.warn('The searchtree has not jet been initialized.\n' + \
+                self.warn('The searchtree has not (jet) been initialized.\n' + \
                     'Run .init_data() first with a valid dataset', dtDataWarning, 1)
                 return x
 
