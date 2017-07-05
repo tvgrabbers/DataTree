@@ -2533,14 +2533,21 @@ class DATAtree():
                             except:
                                 calc_warning('split')
 
-                elif isinstance(value, (int, float)):
-                    if cd[0] == self.dtc.calcMultiply:
+                if cd[0] == self.dtc.calcMultiply:
+                    try:
                         value = int(value) * cd[1]
 
-                    elif cd[0] == self.dtc.calcDivide:
+                    except:
+                        calc_warning('multiplier')
+
+                elif cd[0] == self.dtc.calcDivide:
+                    try:
                         value = int(value) // cd[1]
 
-                if cd[0] == self.dtc.calcReplace:
+                    except:
+                        calc_warning('divider')
+
+                elif cd[0] == self.dtc.calcReplace:
                     if isinstance(value, (str, unicode)):
                         v = value.strip().lower()
 
@@ -3759,7 +3766,11 @@ class DataTreeShell():
             # Combine a date and time value
             elif fid == 4:
                 if not is_data_value(0, data, datetime.date):
-                    data[0] = self.current_date
+                    if is_data_value(4, data, datetime.date):
+                        data[0] = data[4]
+
+                    else:
+                        data[0] = self.current_date
 
                 if not(is_data_value(0, data, datetime.date) \
                   and is_data_value(1, data, datetime.time) \
