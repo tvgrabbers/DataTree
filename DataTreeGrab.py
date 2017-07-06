@@ -1014,8 +1014,6 @@ class DataDef_Convert():
                             ("notchildkeys", self.dtc.selNotChildKeys, "json"),
                             ("notattrs", self.dtc.selNotAttrs, "html")):
                         if ttext in inode.keys() and self.ddtype in (tree_type, ""):
-                            self.ddtype = tree_type
-                            sel_node[1] += dtsel
                             if isinstance(inode[ttext], dict):
                                 sel_node[self.dtc.selPos[dtsel]] = (convert_attr_dict(inode[ttext]), )
 
@@ -1026,6 +1024,14 @@ class DataDef_Convert():
                                         dtt.append(convert_attr_dict(ldict))
 
                                 sel_node[self.dtc.selPos[dtsel]] = tuple(dtt)
+
+                            else:
+                                self.warn('An invalid "%s" keyword was encountered. Ignoring it.' % \
+                                    ( ttext, ), dtConversionWarning, 2)
+
+                            if sel_node[self.dtc.selPos[dtsel]] != None:
+                                self.ddtype = tree_type
+                                sel_node[1] += dtsel
 
                 if sel_node[1] > 0:
                     # Add any found node selection statements as independent node
