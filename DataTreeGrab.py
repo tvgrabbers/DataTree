@@ -484,6 +484,13 @@ class DataTreeConstants():
     storePathValue =256
     getOnlyOne = 512
     getLast = 1024
+    node_name = {
+            isNone: "Empty node_def",
+            isNodeSel: "Node Selection node_def",
+            isNodeLink: "Node Storing node_def",
+            storeName: "Name Selection node_def",
+            isValue: "Value Selection node_def"}
+
     # Node selection and the tuple position for details (node_def type 1 and 2)
     selMain = 7
     selNone = 0
@@ -559,6 +566,24 @@ class DataTreeConstants():
     typeLower = 15
     typeUpper = 16
     typeCapitalize = 17
+    type_name = {
+            typeTimeStamp: "TimeStamp",
+            typeDateTimeString: "DateTimeString",
+            typeTime: "Time",
+            typeTimeDelta: "TimeDelta",
+            typeDate: "Date",
+            typeDateStamp: "DateStamp",
+            typeRelativeWeekday: "RelativeWeekday",
+            typeString: "String",
+            typeInteger: "Integer",
+            typeFloat: "Float",
+            typeBoolean: "Boolean",
+            typeLowerAscii: "LowerAscii",
+            typeStringList: "StringList",
+            typeList: "List",
+            typeLower: "Lower",
+            typeUpper: "Upper",
+            typeCapitalize: "Capitalize"}
     # About the link_defs
     linkNone = 0
     linkGroup = 3
@@ -1670,24 +1695,10 @@ class DATAnode():
             return calc_def
 
         def print_type_def(type_def):
-            vtype = {
-                    self.dtc.typeTimeStamp: "TimeStamp",
-                    self.dtc.typeDateTimeString: "DateTimeString",
-                    self.dtc.typeTime: "Time",
-                    self.dtc.typeTimeDelta: "TimeDelta",
-                    self.dtc.typeDate: "Date",
-                    self.dtc.typeDateStamp: "DateStamp",
-                    self.dtc.typeRelativeWeekday: "RelativeWeekday",
-                    self.dtc.typeString: "String",
-                    self.dtc.typeInteger: "Integer",
-                    self.dtc.typeFloat: "Float",
-                    self.dtc.typeBoolean: "Boolean",
-                    self.dtc.typeLowerAscii: "LowerAscii",
-                    self.dtc.typeStringList: "StringList",
-                    self.dtc.typeList: "List"}
-            return "%s: %s" % (vtype[type_def[0]], type_def)
+            return "%s: %s" % (self.dtc.type_name[type_def[0]], type_def[1:])
 
         def print_node_sel_def(sel_def, spc):
+            sel_node = (sel_def[1] & self.dtc.selMain)
             return sel_def
 
                 #~ if sel_node == self.dtc.selPathLink:
@@ -1695,17 +1706,11 @@ class DATAnode():
                 #~ elif sel_node == self.dtc.selPathParent:
                 #~ elif sel_node == self.dtc.selPathAll:
 
-        nodetype = {
-                self.dtc.isNodeSel: "Node",
-                self.dtc.storeName: "Name",
-                self.dtc.isValue: "Value"}
-
         spc = self.dtree.get_leveltabs(self.level,4)
         if self.dtree.is_data_value("dtversion", tuple):
             ndef_type = (node_def[0] & self.dtc.isGroup)
             if ndef_type == self.dtc.isNodeSel:
-                sel_node = (node_def[1] & self.dtc.selMain)
-                rstr = u'%s%s Selection node_def' % (spc, nodetype[ndef_type])
+                rstr = u'%s%s' % (spc, self.dtc.node_name[ndef_type])
                 if node_def[0] & self.dtc.getLast:
                     rstr = u'%s returning only the last found node :\n%s          ' % (rstr, spc)
 
@@ -1721,7 +1726,7 @@ class DATAnode():
                 rstr = u'%sSaving Node (%s) as ID = %s' % (spc, self.print_node(), node_def[1])
 
             elif ndef_type in (self.dtc.storeName, self.dtc.isValue):
-                rstr = u'%s%s Selection node_def: %s' % (spc, nodetype[ndef_type], print_val_def(node_def[1]))
+                rstr = u'%s%s: %s' % (spc, self.dtc.node_name[ndef_type], print_val_def(node_def[1]))
                 if node_def[0] & self.dtc.hasCalc:
                     rstr = u'%s\n%s      with calcfunctions: (%s)' % \
                         (rstr, spc, print_calc_def(node_def[self.dtc.getPos[self.dtc.hasCalc]]))
@@ -2158,6 +2163,7 @@ class DATAtree():
     def __init__(self, output = sys.stdout, warnaction = None, warngoal = sys.stderr, caller_id = 0):
         self.tree_lock = RLock()
         with self.tree_lock:
+            self.tree_type=''
             self.dtc = DataTreeConstants()
             self.print_searchtree = False
             self.show_result = False
@@ -2217,6 +2223,11 @@ class DATAtree():
                     return self.ddconv.errorcode & dte.dtFatalError
 
                 self.data_def = self.ddconv.cdata_def
+
+            if not self.data_def["dttype"] in (self.tree_type, ''):
+                self.warn('Your data_def is written for a %s tree and is not usable for %s data' \
+                    % (self.data_def["dttype"], self.tree_type), dtdata_defWarning, 1)
+                return dte.dtDataDefInvalid
 
             self.month_names = self.data_def["month-names"]
             self.weekdays = self.data_def["weekdays"]
@@ -2821,6 +2832,7 @@ class HTMLtree(HTMLParser, DATAtree):
         HTMLParser.__init__(self)
         DATAtree.__init__(self, output, warnaction, warngoal, caller_id)
         with self.tree_lock:
+            self.tree_type ='html'
             self.print_tags = print_tags
             self.autoclose_tags = autoclose_tags
             self.is_tail = False
@@ -3009,6 +3021,7 @@ class JSONtree(DATAtree):
     def __init__(self, data, output = sys.stdout, warnaction = "default", warngoal = sys.stderr, caller_id = 0):
         DATAtree.__init__(self, output, warnaction, warngoal, caller_id)
         with self.tree_lock:
+            self.tree_type ='json'
             self.extract_from_parent = True
             self.data = data
             # Read the json data into the tree
@@ -3043,6 +3056,7 @@ class DataTreeShell():
             self.timezone = pytz.utc
             self.errorcode = dte.dtDataInvalid
             self.result = []
+            self.data_def = None
             self.init_data_def(data_def)
             if data != None:
                 self.init_data(data)
@@ -3381,6 +3395,11 @@ class DataTreeShell():
         with self.tree_lock:
             dttype = None
             self.searchtree = None
+            if self.data_def == None:
+                self.set_errorcode(dte.dtDataDefInvalid, True)
+                self.warn('Please first initialize a data_def before loading your data.', dtdata_defWarning, 1)
+                return self.check_errorcode()
+
             self.errorcode = dte.dtDataInvalid
             self.result = []
             if isinstance(data, (dict, list)):
@@ -3399,6 +3418,18 @@ class DataTreeShell():
 
             elif isinstance(data, (str, unicode)) and data.strip()[0] == "<":
                 dttype = 'html'
+
+            else:
+                self.warn('Failed to initialise the searchtree. Run with a valid dataset', dtDataWarning, 1)
+                return self.check_errorcode()
+
+            if not self.data_def["dttype"] in (dttype, ''):
+                self.set_errorcode(dte.dtDataDefInvalid, True)
+                self.warn('Your data_def is written for a %s tree and is not usable for %s data' \
+                    % (self.data_def["dttype"], dttype), dtdata_defWarning, 1)
+                return self.check_errorcode()
+
+            if dttype == 'html':
                 autoclose_tags = self.data_def["autoclose-tags"]
                 # Cover for incomplete reads where the essentiel body part is retrieved
                 for ctag in ('body', 'BODY', 'html', 'HTML', 'xml', 'XML'):
@@ -3428,11 +3459,7 @@ class DataTreeShell():
 
                 self.searchtree = HTMLtree(data, autoclose_tags, self.print_tags, self.fle, caller_id = self.caller_id, warnaction = None)
 
-            else:
-                self.warn('Failed to initialise the searchtree. Run with a valid dataset', dtDataWarning, 1)
-                return self.check_errorcode()
-
-            if dttype == 'json':
+            elif dttype == 'json':
                 for sitem in self.data_def['data']['sort']:
                     try:
                         sort_list(data, list(sitem[0]), list(sitem[1]))
