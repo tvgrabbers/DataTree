@@ -35,7 +35,7 @@ For the newest version and documentation see:
     along with this program.  If not, see <http://www.gnu.org/licenses/>.'''
 
 from __future__ import unicode_literals
-import re, sys, traceback, types
+import re, sys, traceback, types, pickle
 import time, datetime, pytz
 from threading import RLock
 from Queue import Queue
@@ -54,7 +54,7 @@ dt_name = u'DataTreeGrab'
 dt_major = 1
 dt_minor = 4
 dt_patch = 0
-dt_patchdate = u'20170625'
+dt_patchdate = u'20170710'
 dt_alfa = False
 dt_beta = True
 _warnings = None
@@ -407,8 +407,9 @@ class dtErrorConstants():
     dtHTTPerror = 3
     dtJSONerror = 4
     dtEmpty = 5
-    dtStartNodeInvalid = 6
-    dtDataDefInvalid = 7
+    dtIncompleteRead = 6
+    dtStartNodeInvalid = 7
+    dtDataDefInvalid = 8
     dtDataInvalid = 10
     dtNoData = 14
     dtUnknownError = 15
@@ -431,10 +432,10 @@ class dtErrorConstants():
         dtHTTPerror: 'A HTTP error occured',
         dtJSONerror: 'A JSON error occured',
         dtEmpty: 'Empty Page',
+        dtIncompleteRead: 'Incomplete Read',
         dtStartNodeInvalid: 'Invalid startnode!',
         dtDataDefInvalid: 'Invalid data_def',
         dtDataInvalid: 'Invalid dataset!',
-        8: 'Unused Error 8',
         9: 'Unused Error 9',
         dtNoData: 'No Data',
         11: 'User Error 11',
@@ -547,6 +548,22 @@ class DataTreeConstants():
     calcDivide = 17
     calcReplace = 7
     calcDefault = 32
+    calc_name = {
+            calcNone: "No calculation",
+            calcLettering: "CaseSetting",
+            calcAsciiReplace: "AsciiReplace",
+            calcLstrip: "Left Striping",
+            calcRstrip: "Right Striping",
+            calcSub: "Substituting",
+            calcSplit: "Splitting",
+            calcMultiply: "Multipling with",
+            calcDivide: "Dividing by",
+            calcReplace: "Replacing",
+            calcDefault: "Default"}
+    case_name = {
+            calcLower: "Lower Case",
+            calcUpper: "Upper Case",
+            calcCapitalize: "Capitalised"}
     # What type to select
     typeNone = 0
     typeTimeStamp = 1
@@ -567,6 +584,7 @@ class DataTreeConstants():
     typeUpper = 16
     typeCapitalize = 17
     type_name = {
+            typeNone: "No Type",
             typeTimeStamp: "TimeStamp",
             typeDateTimeString: "DateTimeString",
             typeTime: "Time",
@@ -626,6 +644,20 @@ class DataTreeConstants():
         linkhasMax: 6,
         linkhasMin: 7}
 
+    def const_text(self, ttype, tvalue):
+        if ttype == 'node_name' and tvalue in self.node_name.keys():
+            return self.node_name[tvalue]
+
+        elif ttype == 'type_name' and tvalue in self.type_name.keys():
+            return self.type_name[tvalue]
+
+        elif ttype == 'calc_name' and tvalue in self.calc_name.keys():
+            return self.calc_name[tvalue]
+
+        elif ttype == 'case_name' and tvalue in self.case_name.keys():
+            return self.case_name[tvalue]
+
+        return ''
 # end DataTreeConstants()
 
 class DataDef_Convert():
@@ -737,6 +769,7 @@ class DataDef_Convert():
 
                 elif is_data_value("attr", node_def, str) and self.ddtype in ("html", ""):
                     self.ddtype="html"
+                    #~ sel_node = [self.dtc.getAttr, convert_value_link(node_def["attr"])]
                     sel_node = [self.dtc.getAttr, node_def["attr"].lower()]
 
                 elif is_data_value("select", node_def, str):
@@ -904,6 +937,15 @@ class DataDef_Convert():
                     elif node_def['type'] == 'string':
                         type_def = (self.dtc.typeString, )
 
+                    elif node_def['type'] == 'lower':
+                        type_def = (self.dtc.typeLower, )
+
+                    elif node_def['type'] == 'upper':
+                        type_def = (self.dtc.typeUpper, )
+
+                    elif node_def['type'] == 'capitalize':
+                        type_def = (self.dtc.typeCapitalize, )
+
                     elif node_def['type'] == 'int':
                         type_def = (self.dtc.typeInteger, )
 
@@ -968,6 +1010,7 @@ class DataDef_Convert():
                     pd.append(nd)
 
             dpath=[]
+            # Parse through the node_defs
             for n in range(len(pd)):
                 inode = pd[n]
                 # Add any name definition as independent node
@@ -984,6 +1027,7 @@ class DataDef_Convert():
                 for i in range(1, self.dtc.selPosMax):
                     sel_node.append(None)
 
+                # Check for a main statement
                 if "path" in inode.keys():
                     for ttext, dtsel in (
                             ("all", self.dtc.selPathAll),
@@ -1019,12 +1063,13 @@ class DataDef_Convert():
 
                             break
 
+                # Check when allowed for an Index statement
                 if sel_node[1] in (self.dtc.selNone, self.dtc.selTag, self.dtc.selTags, self.dtc.selKeys) and "index" in inode.keys():
                     sel_node[1] += self.dtc.selIndex
                     sel_node[self.dtc.selPos[self.dtc.selIndex]] = convert_value_list(inode["index"], True)
 
+                # Check when allowed for secundary statements
                 if sel_node[1] not in (self.dtc.selNone, self.dtc.selPathParent, self.dtc.selPathRoot, self.dtc.selPathLink):
-                    # Look for detail node selection statements
                     for ttext, dtsel in (
                             ("text", self.dtc.selText),
                             ("tail", self.dtc.selTail)):
@@ -1058,8 +1103,8 @@ class DataDef_Convert():
                                 self.ddtype = tree_type
                                 sel_node[1] += dtsel
 
+                # Add any found node selection statements as independent node
                 if sel_node[1] > 0:
-                    # Add any found node selection statements as independent node
                     while sel_node[-1] == None:
                         sel_node.pop(-1)
 
@@ -1210,7 +1255,7 @@ class DataDef_Convert():
 
             return link_node
 
-    def convert_data_def(self, data_def = None, ptype = "", include_url = True, include_links = True):
+    def convert_data_def(self, data_def = None, ptype = "", include_url = True, include_links = True, file_name = None):
         def _get_url_part(u_part):
             urlid = None
             if isinstance(u_part, (str, unicode)):
@@ -1399,7 +1444,32 @@ class DataDef_Convert():
                 for k, v in self.data_value("values", dict).items():
                     self.cdata_def["values"][k] = self.convert_link_def(v, k, value_count,False)
 
+            if file_name != None:
+                self.store_cdata_def(file_name)
+
             return self.errorcode
+
+    def write_cdata_def(self, output = sys.stdout, data = None):
+        with self.tree_lock:
+            if data == None:
+                data = self.cdata_def
+
+            if output in (sys.stdout, sys.stderr):
+                output.write(data.encode('utf-8', 'replace'))
+
+            else:
+                output.write(u'%s\n' % data)
+
+    def store_cdata_def(self, filename, data = None):
+        with self.tree_lock:
+            if data == None:
+                data = self.cdata_def
+
+            try:
+                pickle.dump(data, open(file_name, 'w'), 2)
+
+            except:
+                self.warn('Failed to store the converted fil as: "%s"' % ( filename, ), dtConversionWarning, 1)
 
     def dtversion(self):
         return tuple(version()[1:4])
@@ -1472,7 +1542,7 @@ class DATAnode():
 
             if nfound:
                 if self.dtree.show_result:
-                    self.dtree.print_text(u'    found node %s;\n      %s' % \
+                    self.dtree.print_text(u'    found node %s;\n%s' % \
                         (node.print_node(), node.print_node_def(d_def[0])))
 
             return nfound
@@ -1515,11 +1585,11 @@ class DATAnode():
                 val = self.find_value(d_def[0])
                 if self.dtree.show_result:
                     if isinstance(val, (str,unicode)):
-                        self.dtree.print_text(u'    found nodevalue (="%s"): %s\n      %s' % \
+                        self.dtree.print_text(u'    found nodevalue (="%s"): %s\n%s' % \
                             (val, self.print_node(), self.print_node_def(d_def[0])))
 
                     else:
-                        self.dtree.print_text(u'    found nodevalue (=%s): %s\n      %s' % \
+                        self.dtree.print_text(u'    found nodevalue (=%s): %s\n%s' % \
                             (val, self.print_node(), self.print_node_def(d_def[0])))
 
                 if (d_def[0][0] & self.dtc.storeLinkValue):
@@ -1551,7 +1621,7 @@ class DATAnode():
             self.end_links["values"] = links["values"].copy()
             self.end_links["nodes"] = links["nodes"].copy()
             if self.dtree.show_result:
-                self.dtree.print_text(u'  adding node %s' % (self.print_node(), ))
+                self.dtree.print_text(u'  adding node (= %s) %s' % (childs[0][1], self.print_node()))
 
         if nm == None:
             return childs
@@ -1658,7 +1728,6 @@ class DATAnode():
             return nv
 
     def find_value(self, node_def = None):
-        # Detailed in child class Collect and return any value
         if node_def[0] & self.dtc.isGroup not in (self.dtc.isValue, self.dtc.storeName):
             return None
 
@@ -1687,68 +1756,201 @@ class DATAnode():
         # Detailed in child class Collect and return any value
         return self.value
 
-    def print_node_def(self, node_def):
-        def print_val_def(val_def):
-            return val_def
+    def get_leveltabs(self, spaces=4, pluslevel=0):
+        return u''.ljust(spaces * (self.level + pluslevel))
 
-        def print_calc_def(calc_def):
-            return calc_def
+    def print_sel_def(self, sel_def, spc):
+        # Detailed in child class to print its specific keys in human form
+        return sel_def
+
+    def print_value_link(self, vldef, is_index = False):
+        if vldef[0] == self.dtc.valValue:
+            if isinstance(vldef[1], (str, unicode)):
+                return u'"%s"' % vldef[1]
+            return vldef[1]
+
+        if vldef[0] & self.dtc.valLinkPlus:
+            lv = 'Value-Link ID: %s + %s' % (vldef[1], vldef[2])
+
+        elif vldef[0] & self.dtc.valLinkMin:
+            lv = 'Value-Link ID: %s - %s' % (vldef[1], vldef[2])
+
+        else:
+            lv = 'Value-Link ID: %s' % (vldef[1], )
+
+        if is_index and vldef[0] & self.dtc.valLinkNext:
+            return 'higher then %s' % (lv, )
+
+        elif is_index and vldef[0] & self.dtc.valLinkPrevious:
+            return 'lower then %s' % (lv, )
+
+        return lv
+
+    def print_value_link_list(self, vldef, is_index = False, add_starter = False):
+        if isinstance(vldef[0], int):
+            return self.print_value_link(vldef, is_index)
+
+        vlist = []
+        for item in vldef:
+            vlist.append(self.print_value_link(item, is_index))
+
+        if len(vlist) == 0:
+            return 'Any of the values: ()'
+
+        elif vlist[0] == None:
+            if add_starter:
+                return 'with any value'
+
+            else:
+                return 'any value'
+
+        elif len(vlist) == 1:
+            if add_starter:
+                return 'with a value: %s' % vlist[0]
+
+            else:
+                return vlist[0]
+
+        else:
+            if add_starter:
+                rtx = 'with any of the values:('
+
+            else:
+                rtx = '('
+
+            for v in vlist:
+                rtx = '%s %s, ' % (rtx, v)
+
+            return '%s)' % (rtx.rstrip().rstrip(','), )
+
+    def print_val_def(self, val_def):
+        # Detailed in child class to print its specific keys in human form
+        return val_def
+
+    def print_node_def(self, node_def):
+        def print_calc_def(calc_def, spc):
+            rv = ''
+            for cd in calc_def:
+                if cd[0] == self.dtc.calcLettering:
+                    rv = '%s%s to %s\n%s'% \
+                        (rv, self.dtc.const_text('calc_name',cd[0]), self.dtc.const_text('case_name',cd[1]), spc)
+
+                elif cd[0] == self.dtc.calcAsciiReplace:
+                    st = 'replacing non ascii characters with "%s"' % (cd[1][0], )
+                    n = 2
+                    while len(cd[1]) > n:
+                        st += ', "%s" with "%s"' % (cd[1][2], cd[1][1])
+                        n+= 2
+
+                    rv = '%s%s: %s\n%s'% (rv, self.dtc.const_text('calc_name',cd[0]), st, spc)
+
+                elif cd[0] in (self.dtc.calcLstrip, self.dtc.calcRstrip):
+                    rv = '%s%s: %s if present\n%s'% (rv, self.dtc.const_text('calc_name',cd[0]), cd[1], spc)
+
+                elif cd[0] == self.dtc.calcSub:
+                    st = ''
+                    for sset in cd[1]:
+                        st += ', "%s" with "%s"' % (sset[0], sset[1])
+
+                    rv = '%s%s: %s\n%s'% (rv, self.dtc.const_text('calc_name',cd[0]), st, spc)
+
+                elif cd[0] == self.dtc.calcSplit:
+                    for sset in cd[1]:
+                        rv = '%s%s on "%s" and returning parts: %s\n%s'% \
+                            (rv, self.dtc.const_text('calc_name',cd[0]), sset[0], sset[1:], spc)
+
+                elif cd[0] in (self.dtc.calcMultiply, self.dtc.calcDivide):
+                    rv = '%s%s %s\n%s'% (rv, self.dtc.const_text('calc_name',cd[0]), cd[1], spc)
+
+                elif cd[0] == self.dtc.calcReplace:
+                    rv = '%s%s any found value in %s with the corresponding value in %s\n%s'% \
+                        (rv, self.dtc.const_text('calc_name',cd[0]), cd[1], cd[2], spc)
+
+            return rv.rstrip('\n').rstrip()
 
         def print_type_def(type_def):
-            return "%s: %s" % (self.dtc.type_name[type_def[0]], type_def[1:])
+            if type_def[0] in (self.dtc.typeTimeStamp, self.dtc.typeDateStamp):
+                return "%s: dividing the value first by: %s" % \
+                    (self.dtc.const_text('type_name', type_def[0]), type_def[1])
+
+            elif type_def[0] == self.dtc.typeDateTimeString:
+                return "%s using %s" % (self.dtc.const_text('type_name', type_def[0]), type_def[1])
+
+            elif type_def[0] == self.dtc.typeTime:
+                return '%s using %s hour clock and splitting on "%s"' % \
+                    (self.dtc.const_text('type_name', type_def[0]), type_def[1], type_def[2])
+
+            elif type_def[0] == self.dtc.typeDate:
+                return "%s using %s" % (self.dtc.const_text('type_name', type_def[0]), type_def[1])
+
+            elif type_def[0] == self.dtc.typeStringList:
+                if type_def[2]:
+                    return '%s: splitting on "%s" removing any empty (strings/values' % \
+                        (self.dtc.const_text('type_name', type_def[0]), type_def[1])
+
+                return '%s: splitting on "%s"' % (self.dtc.const_text('type_name', type_def[0]), type_def[1])
+
+            else:
+                return self.dtc.const_text('type_name', type_def[0])
 
         def print_node_sel_def(sel_def, spc):
             sel_node = (sel_def[1] & self.dtc.selMain)
-            return sel_def
+            if sel_node == self.dtc.selPathLink:
+                return 'returning the earlier stored Node link: %s' % (sel_def[self.dtc.selPos[self.dtc.selPathLink]], )
 
-                #~ if sel_node == self.dtc.selPathLink:
-                #~ elif sel_node == self.dtc.selPathRoot:
-                #~ elif sel_node == self.dtc.selPathParent:
-                #~ elif sel_node == self.dtc.selPathAll:
+            elif sel_node == self.dtc.selPathRoot:
+                return 'returning the Root Node'
 
-        spc = self.dtree.get_leveltabs(self.level,4)
+            elif sel_node == self.dtc.selPathParent:
+                return 'returning the Parent Node'
+
+            elif node_def[0] & self.dtc.getLast:
+                return u'returning the last found Child Node%s'% \
+                        (self.print_sel_def(sel_def, spc), )
+
+            elif node_def[0] & self.dtc.getOnlyOne:
+                return u'returning the first found Child Node%s'% \
+                        (self.print_sel_def(sel_def, spc), )
+
+            else:
+                return u'returning all Child Nodes%s'% (self.print_sel_def(sel_def, spc), )
+
+        spc = self.get_leveltabs(4, 1)
+        spc2 = self.get_leveltabs(4, 2)
+        spc3 = self.get_leveltabs(4, 3)
         if self.dtree.is_data_value("dtversion", tuple):
             ndef_type = (node_def[0] & self.dtc.isGroup)
             if ndef_type == self.dtc.isNodeSel:
-                rstr = u'%s%s' % (spc, self.dtc.node_name[ndef_type])
-                if node_def[0] & self.dtc.getLast:
-                    rstr = u'%s returning only the last found node :\n%s          ' % (rstr, spc)
-
-                elif node_def[0] & self.dtc.getOnlyOne:
-                    rstr = u'%s returning only the first found node :\n%s          ' % (rstr, spc)
-
-                else:
-                    rstr = u'%s :\n%s          ' % (rstr, spc)
-
-                rstr = u'%s%s\n%s          ' % (rstr, print_node_sel_def(node_def, spc), spc)
+                rstr = u'%s%s %s\n%s' % \
+                    (spc, self.dtc.const_text('node_name',ndef_type), print_node_sel_def(node_def, spc), spc)
 
             elif ndef_type == self.dtc.isNodeLink:
-                rstr = u'%sSaving Node (%s) as ID = %s' % (spc, self.print_node(), node_def[1])
+                rstr = u'%sStoring the Node under Node-Link ID: %s' % (spc, node_def[1])
 
             elif ndef_type in (self.dtc.storeName, self.dtc.isValue):
-                rstr = u'%s%s: %s' % (spc, self.dtc.node_name[ndef_type], print_val_def(node_def[1]))
+                rstr = u'%s%s: returning %s' % (spc, self.dtc.const_text('node_name', ndef_type), self.print_val_def(node_def[1]))
                 if node_def[0] & self.dtc.hasCalc:
-                    rstr = u'%s\n%s      with calcfunctions: (%s)' % \
-                        (rstr, spc, print_calc_def(node_def[self.dtc.getPos[self.dtc.hasCalc]]))
+                    rstr = u'%s\n%swith calcfunctions: (%s)' % \
+                        (rstr, spc2, print_calc_def(node_def[self.dtc.getPos[self.dtc.hasCalc]], spc3))
 
                 if node_def[0] & self.dtc.hasDefault:
-                    rstr = u'%s\n%s       with a default value of: (%s)' % \
-                        (rstr, spc, node_def[self.dtc.getPos[self.dtc.hasDefault]])
+                    rstr = u'%s\n%swith a default value of: (%s)' % \
+                        (rstr, spc2, node_def[self.dtc.getPos[self.dtc.hasDefault]])
 
                 if node_def[0] & self.dtc.hasType:
-                    rstr = u'%s\n%s      with a type definition as: %s' % \
-                        (rstr, spc, print_type_def(node_def[self.dtc.getPos[self.dtc.hasType]]))
+                    rstr = u'%s\n%swith a type definition as: %s' % \
+                        (rstr, spc2, print_type_def(node_def[self.dtc.getPos[self.dtc.hasType]]))
 
                 if node_def[0] & self.dtc.isMemberOff:
-                    rstr = u'%s\n%s      which must be present in the %s value_filter list' % \
-                        (rstr, spc, node_def[self.dtc.getPos[self.dtc.isMemberOff]])
+                    rstr = u'%s\n%swhich must be present in the %s value_filter list' % \
+                        (rstr, spc2, node_def[self.dtc.getPos[self.dtc.isMemberOff]])
 
                 if node_def[0] & self.dtc.storeLinkValue:
-                    rstr = u'%s\n%s    storing it as value link: (%s)' % \
+                    rstr = u'%s\n%sStoring it under Value-Link ID: %s' % \
                         (rstr, spc, node_def[self.dtc.getPos[self.dtc.storeLinkValue]])
 
                 if node_def[0] & self.dtc.storePathValue:
-                    rstr = u'%s\n%s    returning it as path_def value' % (rstr, spc)
+                    rstr = u'%s\n%sReturning it as path_def value' % (rstr, spc)
 
         else:
             rstr = u'%snode_def: ' % (spc, )
@@ -1758,7 +1960,7 @@ class DATAnode():
         return rstr.rstrip('\n').rstrip()
 
     def print_tree(self):
-        sstr =u'%s%s' % (self.dtree.get_leveltabs(self.level,4), self.print_node(True))
+        sstr =u'%s%s' % (self.get_leveltabs(), self.print_node(True))
         self.dtree.print_text(sstr)
         for n in self.children:
             n.print_tree()
@@ -1937,19 +2139,19 @@ class HTMLnode(DATAnode):
 
         val_source = val_def[0] & self.dtc.getGroup
         if val_source == self.dtc.getText:
-            sv = self.text
+            return self.text
 
         elif val_source == self.dtc.getAttr:
-            sv = self.get_attribute(val_def[1])
+            return self.get_attribute(val_def[1])
 
         elif val_source == self.dtc.getIndex:
-            sv = self.child_index
+            return self.child_index
 
         elif val_source == self.dtc.getTag:
-            sv = self.tag
+            return self.tag
 
         elif val_source == self.dtc.getTail:
-            sv = self.tail
+            return self.tail
 
         elif val_source == self.dtc.getInclusiveText:
             def add_child_text(child, depth, in_ex, tag_list):
@@ -1974,20 +2176,114 @@ class HTMLnode(DATAnode):
             for c in self.children:
                 sv = u'%s %s' % (sv, add_child_text(c, depth, in_ex, tag_list))
 
+            return sv
+
         elif val_source == self.dtc.getLitteral:
-            sv = val_def[1]
+            return val_def[1]
 
         elif val_source == self.dtc.getPresence:
             return True
 
         else:
-            sv = self.text
+            return self.text
 
-        return sv
+    def print_val_def(self, val_def):
+        if val_def == None:
+            return "the text"
+
+        val_source = val_def[0] & self.dtc.getGroup
+        if val_source == self.dtc.getText:
+            return "the text"
+
+        elif val_source == self.dtc.getAttr:
+            return 'the attribute value for "%s"' % (val_def[1], )
+
+        elif val_source == self.dtc.getIndex:
+            return "the index"
+
+        elif val_source == self.dtc.getTag:
+            return "the tag"
+
+        elif val_source == self.dtc.getTail:
+            return "the tail text"
+
+        elif val_source == self.dtc.getInclusiveText:
+            if  val_def[1][1] == -1:
+                return 'the inclusive text for a depth of %s excluding the tags: %s' % \
+                    (val_def[1][0], val_def[1][2])
+
+            elif  val_def[1][1] == 1:
+                return 'the inclusive text for a depth of %s only including the tags: %s' % \
+                    (val_def[1][0], val_def[1][2])
+
+            else:
+                return 'the inclusive text for a depth of %s' % (val_def[1][0], )
+
+        elif val_source == self.dtc.getLitteral:
+            return 'the value: "%s"' % ( val_def[1], )
+
+        elif val_source == self.dtc.getPresence:
+            return 'True if found'
+
+        else:
+            return "the text"
+
+    def print_sel_def(self, sel_def, spc):
+        sel_node = (sel_def[1] & self.dtc.selMain)
+        rstr = u''
+        if sel_node == self.dtc.selTag:
+            rstr = u'    a tag: %s,\n%s' % \
+                (self.print_value_link(sel_def[self.dtc.selPos[self.dtc.selTag]]), spc)
+
+        elif sel_node == self.dtc.selTags:
+            rstr = u'    a tag: %s,\n%s' % \
+                (self.print_value_link_list(sel_def[self.dtc.selPos[self.dtc.selTags]]), spc)
+
+        if sel_def[1] &  self.dtc.selAttrs:
+            for cd in sel_def[self.dtc.selPos[self.dtc.selAttrs]]:
+                for ck in cd:
+                    rstr = u'%s    an attribute: "%s",\n%s' % (rstr, ck[0], spc)
+                    if ck[1] == self.dtc.attr:
+                        rstr = u'%s        %s,\n%s' % \
+                            (rstr, self.print_value_link_list(ck[2], add_starter = True), spc)
+
+                    else:
+                        rstr = u'%s        but not %s,\n%s' % \
+                            (rstr, self.print_value_link_list(ck[2], add_starter = True), spc)
+
+        if sel_def[1] &  self.dtc.selNotAttrs:
+            for cd in sel_def[self.dtc.selPos[self.dtc.selNotAttrs]]:
+                for ck in cd:
+                    rstr = u'%s    not an attribute: "%s",\n%s' % (rstr, ck[0], spc)
+                    if ck[1] == self.dtc.attr:
+                        rstr = u'%s        %s,\n%s' % \
+                            (rstr, self.print_value_link_list(ck[2], add_starter = True), spc)
+
+                    else:
+                        rstr = u'%s        unless %s,\n%s' % \
+                            (rstr, self.print_value_link_list(ck[2], add_starter = True), spc)
+
+        if sel_node  in (self.dtc.selNone, self.dtc.selTag, self.dtc.selTags) and sel_def[1] &  self.dtc.selIndex:
+            rstr = u'%s    an index: %s,\n%s' % \
+                (rstr, self.print_value_link_list(sel_def[self.dtc.selPos[self.dtc.selIndex]], True), spc)
+
+        if sel_def[1] &  self.dtc.selText:
+            rstr = u'%s    a text: %s,\n%s' % \
+                (rstr, self.print_value_link_list(sel_def[self.dtc.selPos[self.dtc.selText]]), spc)
+
+        if sel_def[1] &  self.dtc.selTail:
+            rstr = u'%s    a tailtext: %s,\n%s' % \
+                (rstr, self.print_value_link_list(sel_def[self.dtc.selPos[self.dtc.selTail]]), spc)
+
+        if rstr == u'':
+            return u'.\n%s' % (spc, )
+
+        else:
+            return u' with: \n%s%s' % (spc, rstr)
 
     def print_node(self, print_all = False):
         attributes = u''
-        spc = self.dtree.get_leveltabs(self.level,4)
+        spc = self.get_leveltabs(4, 1)
         if len(self.attributes) > 0:
             for a in self.attr_names:
                 v = self.attributes[a]
@@ -1997,7 +2293,7 @@ class HTMLnode(DATAnode):
                 attributes = u'%s%s = "%s",\n    %s' % (attributes, a, v, spc)
             attributes = attributes[:-(len(spc)+6)]
 
-        rstr = u'%s: %s(%s)' % (self.level, self.tag, attributes)
+        rstr = u'at level %s:\n%s%s(%s)' % (self.level, spc, self.tag, attributes)
         rstr = u'%s\n    %sindex: %s' % (rstr, spc, self.child_index)
         if print_all:
             if self.text != '':
@@ -2134,24 +2430,100 @@ class JSONnode(DATAnode):
 
         val_source = val_def[0] & self.dtc.getGroup
         if val_source == self.dtc.getValue:
-            sv = self.value
+            return self.value
 
         elif val_source == self.dtc.getIndex:
-            sv = self.child_index
+            return self.child_index
 
         elif val_source == self.dtc.getKey:
-            sv = self.key
+            return self.key
 
         elif val_source == self.dtc.getLitteral:
-            sv = val_def[1]
+            return val_def[1]
 
         elif val_source == self.dtc.getPresence:
             return True
 
         else:
-            sv = self.value
+            return self.value
 
-        return sv
+    def print_val_def(self, val_def):
+        if val_def == None:
+            return 'the value'
+
+        val_source = val_def[0] & self.dtc.getGroup
+        if val_source == self.dtc.getValue:
+            return 'the value'
+
+        elif val_source == self.dtc.getIndex:
+            return 'the index'
+
+        elif val_source == self.dtc.getKey:
+            return 'the key'
+
+        elif val_source == self.dtc.getLitteral:
+            return 'the value: "%s"' % ( val_def[1], )
+
+        elif val_source == self.dtc.getPresence:
+            return 'True if found'
+
+        else:
+            return 'the value'
+
+    def print_sel_def(self, sel_def, spc):
+        sel_node = (sel_def[1] & self.dtc.selMain)
+        rstr = u''
+        if sel_node == self.dtc.selKey:
+            rstr = u'    with a key: %s,\n%s' % \
+                (self.print_value_link(sel_def[self.dtc.selPos[self.dtc.selKey]]), spc)
+
+        elif sel_node == self.dtc.selKeys:
+            rstr = u'    with a key: %s,\n%s' % \
+                (self.print_value_link_list(sel_def[self.dtc.selPos[self.dtc.selKeys]]), spc)
+
+        if sel_def[1] &  self.dtc.selChildKeys:
+            for cd in sel_def[self.dtc.selPos[self.dtc.selChildKeys]]:
+                for ck in cd:
+                    if isinstance(ck[0], (str, unicode)):
+                        rstr = u'%s    a childkey: "%s",\n%s' % (rstr, ck[0], spc)
+
+                    else:
+                        rstr = u'%s    a childkey: %s,\n%s' % (rstr, ck[0], spc)
+
+                    if ck[1] == self.dtc.attr:
+                        rstr = u'%s        %s,\n%s' % \
+                            (rstr, self.print_value_link_list(ck[2], add_starter = True), spc)
+
+                    else:
+                        rstr = u'%s        but not %s,\n%s' % \
+                            (rstr, self.print_value_link_list(ck[2], add_starter = True), spc)
+
+        if sel_def[1] &  self.dtc.selNotChildKeys:
+            for cd in sel_def[self.dtc.selPos[self.dtc.selNotChildKeys]]:
+                for ck in cd:
+                    if isinstance(ck[0], (str, unicode)):
+                        rstr = u'%s    not a childkey: "%s",\n%s' % (rstr, ck[0], spc)
+
+                    else:
+                        rstr = u'%s    not a childkey: %s,\n%s' % (rstr, ck[0], spc)
+
+                    if ck[1] == self.dtc.attr:
+                        rstr = u'%s        %s,\n%s' % \
+                            (rstr, self.print_value_link_list(ck[2], add_starter = True), spc)
+
+                    else:
+                        rstr = u'%s        unless %s,\n%s' % \
+                            (rstr, self.print_value_link_list(ck[2], add_starter = True), spc)
+
+        if sel_node  in (self.dtc.selNone, self.dtc.selKeys) and sel_def[1] &  self.dtc.selIndex:
+            rstr = u'%s    with an index: %s,\n%s' % \
+                (rstr, self.print_value_link_list(sel_def[self.dtc.selPos[self.dtc.selIndex]], True), spc)
+
+        if rstr == u'':
+            return u'.\n%s' % (spc, )
+
+        else:
+            return u' with: \n%s%s' % (spc, rstr)
 
     def print_node(self, print_all = False):
         value = self.find_node_value() if self.type == "value" else '"%s"' % (self.type, )
@@ -2322,7 +2694,7 @@ class DATAtree():
                 self.root.print_tree()
 
             if self.show_result:
-                self.print_text(self.root.print_node())
+                self.print_text('Parsing the init_path starting at %s' % (self.root.print_node(), ))
 
             links = {"values": {},"nodes": {}}
             init_path = self.data_def["data"]["init-path"]
@@ -2337,7 +2709,7 @@ class DATAtree():
                 self.start_node = sn[0][0]
                 return dte.dtDataOK
 
-    def find_data_value(self, path_def, start_node = None, links = None):
+    def find_data_value(self, path_def, start_node = None, links = None, searchname = ''):
         with self.tree_lock:
             if isinstance(path_def, list):
                 path_def = self.ddconv.convert_path_def(path_def)
@@ -2357,6 +2729,9 @@ class DATAtree():
                 return
 
             links = {"values": {},"nodes": {}} if links == None else links
+            if searchname != '' and self.show_result:
+                self.print_text('Parsing %s starting at %s' % (searchname, start_node.print_node()))
+
             nlist = start_node.get_children(path_def = path_def, links = links)
             if (path_def[-1][0] & self.dtc.isGroup == self.dtc.isValue) and \
                 (path_def[-1][1][0] & self.dtc.getGroup == self.dtc.getPresence):
@@ -2434,7 +2809,7 @@ class DATAtree():
                     continue
 
                 if self.show_result:
-                    self.print_text(u'parsing keypath: %s' % (dset["key-path"][0], ))
+                    self.print_text(u'Parsing the key_path starting at %s' % (self.start_node.print_node(), ))
 
                 links = {"values": {},"nodes": {}}
                 self.key_list = self.start_node.get_children(path_def = dset["key-path"], links = links)
@@ -2461,7 +2836,11 @@ class DATAtree():
                     if self.show_result:
                         self.print_text(u'parsing key %s' % (tlist, ))
 
+                    i = 0
                     for v in dset["values"][:]:
+                        i += 1
+                        if self.show_result:
+                            self.print_text(u'  searching for value %s' % (i, ))
                         if not isinstance(v, tuple) or len(v) == 0:
                             tlist.append(None)
                             continue
@@ -2679,6 +3058,15 @@ class DATAtree():
             elif type_def[0] == self.dtc.typeString:
                 value = unicode(value)
 
+            elif type_def[0] == self.dtc.typeLower:
+                value = unicode(value).lower()
+
+            elif type_def[0] == self.dtc.typeUpper:
+                value = unicode(value).upper()
+
+            elif type_def[0] == self.dtc.typeCapitalize:
+                value = unicode(value).capitalize()
+
             elif type_def[0] == self.dtc.typeInteger:
                 try:
                     value = int(value)
@@ -2801,17 +3189,6 @@ class DATAtree():
         else:
             self.fle.write(u'%s\n' % (text, ))
 
-    def get_leveltabs(self, level, spaces=3):
-        stab = u''
-        for i in range(spaces):
-            stab += u' '
-
-        sstr = u''
-        for i in range(level):
-            sstr += stab
-
-        return sstr
-
     def simplefilter(self, action, category=Warning, lineno=0, append=0, severity=0):
         with self.tree_lock:
             sys.modules['DataTreeGrab']._warnings.simplefilter(action, category, lineno, append, self.caller_id, severity)
@@ -2919,12 +3296,12 @@ class HTMLtree(HTMLParser, DATAtree):
         self.open_tags[tag] += 1
         if self.print_tags:
             if len(attrs) > 0:
-                self.print_text(u'%sstarting %s %s %s' % (self.get_leveltabs(self.current_node.level,2), self.current_node.level+1, tag, attrs[0]))
+                self.print_text(u'%sstarting %s %s %s' % (self.current_node.get_leveltabs(2), self.current_node.level+1, tag, attrs[0]))
                 for a in range(1, len(attrs)):
-                    self.print_text(u'%s        %s' % (self.get_leveltabs(self.current_node.level,2), attrs[a]))
+                    self.print_text(u'%s        %s' % (self.current_node.get_leveltabs(2), attrs[a]))
 
             else:
-                self.print_text(u'%sstarting %s %s' % (self.get_leveltabs(self.current_node.level,2), self.current_node.level,tag))
+                self.print_text(u'%sstarting %s %s' % (self.current_node.get_leveltabs(2), self.current_node.level,tag))
 
         node = HTMLnode(self, [tag.lower(), attrs], self.current_node)
         self.add_text()
@@ -2948,8 +3325,8 @@ class HTMLtree(HTMLParser, DATAtree):
         self.add_text()
         if self.print_tags:
             if self.current_node.text.strip() != '':
-                self.print_text(u'%s        %s' % (self.get_leveltabs(self.current_node.level-1,2), self.current_node.text.strip()))
-            self.print_text(u'%sclosing %s %s %s' % (self.get_leveltabs(self.current_node.level-1,2), self.current_node.level,tag, self.current_node.tag))
+                self.print_text(u'%s        %s' % (self.current_node.get_leveltabs(2, -1), self.current_node.text.strip()))
+            self.print_text(u'%sclosing %s %s %s' % (self.current_node.get_leveltabs(2, -1), self.current_node.level,tag, self.current_node.tag))
 
         self.last_node = self.current_node
         self.is_tail = True
