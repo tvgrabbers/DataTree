@@ -41,6 +41,7 @@ setup(
     version = __version__,
     description = 'Node-Tree based data extraction',
     py_modules = ['DataTreeGrab', 'test_json_struct'],
+    scripts=['test_data_def.py'],
     requires = ['pytz'],
     provides = ['%s (%s.%s)' % (version()[0], version()[1], version()[2])],
     long_description = __doc__,
