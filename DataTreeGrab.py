@@ -56,7 +56,7 @@ dt_minor = 4
 dt_patch = 0
 dt_patchdate = u'20170710'
 dt_alfa = False
-dt_beta = True
+dt_beta = False
 _warnings = None
 
 __version__  = '%s.%s.%s' % (dt_major,'{:0>2}'.format(dt_minor),'{:0>2}'.format(dt_patch))
