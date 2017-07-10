@@ -1466,10 +1466,10 @@ class DataDef_Convert():
                 data = self.cdata_def
 
             try:
-                pickle.dump(data, open(file_name, 'w'), 2)
+                pickle.dump(data, open(filename, 'w'), 2)
 
             except:
-                self.warn('Failed to store the converted fil as: "%s"' % ( filename, ), dtConversionWarning, 1)
+                self.warn('Failed to store the converted file as: "%s"' % ( filename, ), dtConversionWarning, 1)
 
     def dtversion(self):
         return tuple(version()[1:4])
